@@ -1,45 +1,52 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Post-Europe 2147</title>
-<link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Post-Europe 2147</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
-<div id="title-screen" class="screen active">
-<h1>POST-EUROPE<span>2147</span></h1>
-<p class="subtitle">Auto-Battler stratégique sous le dôme</p>
-<p style="max-width:500px;color:var(--dim);font-size:.85rem;line-height:1.6;padding:0 16px">L'Europe est en ruines. Dirigez Alpha-7, construisez votre armée et repoussez 30 vagues d'envahisseurs guidé par l'IA PROMETHEUS.</p>
-<div class="menu-buttons">
-<button onclick="newGame()">NOUVELLE PARTIE</button>
-<button id="btn-continue" onclick="continueGame()">CONTINUER</button>
+    <div id="title-screen" class="screen active">
+        <h1>POST-EUROPE<span>2147</span></h1>
+        <p class="subtitle">Auto-Battler stratégique sous le dôme</p>
+        <p id="version-label" style="font-size:.7rem;color:var(--dim);letter-spacing:.2em;margin-top:-16px"></p>
+        <p style="max-width:500px;color:var(--dim);font-size:.85rem;line-height:1.6;padding:0 16px">L'Europe est en
+            ruines. Dirigez Alpha-7, construisez votre armée et repoussez 30 vagues d'envahisseurs guidé par l'IA
+            PROMETHEUS.</p>
+        <div class="menu-buttons">
+            <button onclick="newGame()">NOUVELLE PARTIE</button>
+            <button id="btn-continue" onclick="continueGame()">CONTINUER</button>
+        </div>
+    </div>
+    <div id="game-screen" class="screen">
+        <div id="resource-bar"></div>
+        <div id="main-area">
+            <div id="left-panel"></div>
+            <div id="center-panel"></div>
+        </div>
+        <div id="bottom-bar">
+            <button id="btn-battle" onclick="launchBattle()">LANCER LE COMBAT ▶</button>
+            <button class="speed-btn" id="spd1" onclick="setSpeed(1)">×1</button>
+            <button class="speed-btn" id="spd2" onclick="setSpeed(2)">×2</button>
+            <button class="speed-btn" id="spd3" onclick="setSpeed(3)">×3</button>
+        </div>
+    </div>
+    <div id="event-overlay" class="overlay"></div>
+    <div id="chapter-overlay" class="overlay"></div>
+    <div id="end-screen" class="screen">
+        <div id="end-content"></div>
+    </div>
 </div>
-</div>
-<div id="game-screen" class="screen">
-<div id="resource-bar"></div>
-<div id="main-area">
-<div id="left-panel"></div>
-<div id="center-panel"></div>
-</div>
-<div id="bottom-bar">
-<button id="btn-battle" onclick="launchBattle()">LANCER LE COMBAT ▶</button>
-<button class="speed-btn" id="spd1" onclick="setSpeed(1)">×1</button>
-<button class="speed-btn" id="spd2" onclick="setSpeed(2)">×2</button>
-<button class="speed-btn" id="spd3" onclick="setSpeed(3)">×3</button>
-</div>
-</div>
-<div id="event-overlay" class="overlay"></div>
-<div id="chapter-overlay" class="overlay"></div>
-<div id="end-screen" class="screen"><div id="end-content"></div></div>
-</div>
+<script src="js/version.js"></script>
 <script src="js/data.js"></script>
 <script src="js/game.js"></script>
 <script src="js/render.js"></script>
 <script>
-setSpeed(1);
-checkContinue();
+    document.getElementById('version-label').textContent = 'v' + VERSION;
+    setSpeed(1);
+    checkContinue();
 </script>
 </body>
 </html>
