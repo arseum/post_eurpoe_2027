@@ -3,7 +3,7 @@ name: Deploy static site to GitHub Pages
 on:
   push:
     tags:
-      - "*"
+      - "*.*.*"
   workflow_dispatch:
 
 permissions:
@@ -35,20 +35,13 @@ jobs:
           echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
           echo "Version: $VERSION"
 
-      - name: Prepare site
-        run: |
-          mkdir dist
-          cp -R ./* dist/
-
       - name: Generate version.js
         run: |
-          mkdir -p dist/js
-          sed "s/__APP_VERSION__/${APP_VERSION}/g" /js/version.template.js > dist/js/version.js
+          sed "s/__APP_VERSION__/${APP_VERSION}/g" js/version.template.js > js/version.js
 
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: .
 
       - name: Deploy to GitHub Pages
         id: deployment
