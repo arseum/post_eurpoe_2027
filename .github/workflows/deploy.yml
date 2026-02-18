@@ -37,7 +37,7 @@ jobs:
 
       - name: Generate version.js
         run: |
-          sed "s/__APP_VERSION__/${APP_VERSION}/g" src/js/version.template.js > dist/js/version.js
+          sed "s/__APP_VERSION__/${APP_VERSION}/g" src/js/version.template.js > src/js/version.js
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
