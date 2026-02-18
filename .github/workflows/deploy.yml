@@ -35,9 +35,15 @@ jobs:
           echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
           echo "Version: $VERSION"
 
+      - name: Prepare site
+        run: |
+          mkdir dist
+          cp -R ./* dist/
+
       - name: Generate version.js
         run: |
-          sed "s/__APP_VERSION__/${APP_VERSION}/g" src/js/version.template.js > src/js/version.js
+          mkdir -p dist/js
+          sed "s/__APP_VERSION__/${APP_VERSION}/g" /js/version.template.js > dist/js/version.js
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
