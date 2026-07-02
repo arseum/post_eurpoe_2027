@@ -170,7 +170,7 @@ button:disabled {
 
 #main-area {
     display: grid;
-    grid-template-columns:300px 1fr;
+    grid-template-columns:300px 1fr 340px;
     gap: 12px;
     padding: 12px 16px;
     flex: 1;
@@ -182,6 +182,50 @@ button:disabled {
     flex-direction: column;
     gap: 8px;
     overflow-y: auto
+}
+
+#right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    min-height: 0
+}
+
+#base3d-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 420px;
+    height: 100%;
+    border-radius: 12px;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 30%, #101b33 0%, #0a0e1a 70%)
+}
+
+#base3d-view {
+    position: absolute;
+    inset: 0
+}
+
+#base3d-view canvas {
+    display: block;
+    cursor: grab
+}
+
+#base3d-view canvas:active {
+    cursor: grabbing
+}
+
+#base3d-hint {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: .62rem;
+    letter-spacing: .2em;
+    color: var(--dim);
+    pointer-events: none;
+    z-index: 5
 }
 
 .panel {
@@ -588,7 +632,8 @@ button:disabled {
     justify-content: center;
     gap: 12px;
     border-top: 1px solid var(--gb);
-    align-items: center
+    align-items: center;
+    position: relative
 }
 
 #btn-battle {
@@ -879,13 +924,20 @@ button:disabled {
     color: var(--danger)
 }
 
-#left-panel::-webkit-scrollbar, .battle-log::-webkit-scrollbar {
-    width: 4px
+#left-panel::-webkit-scrollbar,
+.battle-log::-webkit-scrollbar,
+.battlefield::-webkit-scrollbar,
+#center-panel::-webkit-scrollbar,
+.log-section .log-entries::-webkit-scrollbar {
+    display: none
 }
 
-#left-panel::-webkit-scrollbar-thumb, .battle-log::-webkit-scrollbar-thumb {
-    background: var(--gb);
-    border-radius: 2px
+#left-panel,
+.battle-log,
+.battlefield,
+#center-panel,
+.log-section .log-entries {
+    scrollbar-width: none
 }
 
 .log-section {
@@ -921,6 +973,60 @@ button:disabled {
     font-weight: 600
 }
 
+#g-tooltip {
+    display: none;
+    position: fixed;
+    background: rgba(10, 14, 26, .97);
+    border: 1px solid var(--gb);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: .72rem;
+    line-height: 1.6;
+    white-space: nowrap;
+    z-index: 500;
+    pointer-events: none;
+    backdrop-filter: blur(12px);
+    color: var(--text)
+}
+
+#g-tooltip.visible {
+    display: block
+}
+
+#g-tooltip .tt-title {
+    font-weight: 600;
+    font-size: .8rem;
+    margin-bottom: 4px;
+    color: var(--energy)
+}
+
+#g-tooltip .tt-row {
+    color: var(--dim)
+}
+
+#g-tooltip .tt-row span {
+    color: var(--text)
+}
+
+@keyframes stabPulse {
+    0%, 100% { opacity: 1 }
+    50% { opacity: .4 }
+}
+
+.stab-critical {
+    animation: stabPulse .8s ease-in-out infinite;
+    color: var(--danger) !important
+}
+
+@keyframes fadeIn {
+    from { opacity: 0 }
+    to { opacity: 1 }
+}
+
+#center-panel > * {
+    animation: fadeIn .25s ease
+}
+
 @media (max-width: 900px) {
     #main-area {
         grid-template-columns:1fr
@@ -929,4 +1035,98 @@ button:disabled {
     #left-panel {
         max-height: 30vh
     }
+
+    #right-panel {
+        max-height: 40vh
+    }
+}
+
+#battle3d-wrap {
+    position: relative;
+    flex: 1;
+    min-height: 420px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: radial-gradient(ellipse at 50% 30%, #101b33 0%, #0a0e1a 70%)
+}
+
+#battle3d-view {
+    position: absolute;
+    inset: 0
+}
+
+#battle3d-view canvas {
+    display: block
+}
+
+.b3d-label {
+    pointer-events: none;
+    width: 96px;
+    text-align: center;
+}
+
+.b3d-name {
+    font-size: .62rem;
+    color: var(--text);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, .8);
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis
+}
+
+.b3d-label .hp-bar {
+    height: 4px
+}
+
+.b3d-hp-text {
+    font-size: .55rem;
+    color: var(--dim);
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums
+}
+
+.b3d-float {
+    pointer-events: none;
+    font-size: 1.05rem;
+    font-weight: 700;
+    animation: floatUp .8s ease-out forwards
+}
+
+.b3d-float.damage {
+    color: var(--danger)
+}
+
+.b3d-float.heal {
+    color: var(--stability)
+}
+
+.b3d-float.dodge {
+    color: var(--accent)
+}
+
+#b3d-round {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: .72rem;
+    letter-spacing: .25em;
+    color: var(--dim);
+    z-index: 5;
+    pointer-events: none
+}
+
+#phase-fade {
+    position: fixed;
+    inset: 0;
+    background: #05070d;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .45s ease;
+    z-index: 900
+}
+
+#phase-fade.active {
+    opacity: 1
 }

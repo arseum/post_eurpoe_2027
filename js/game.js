@@ -137,10 +137,10 @@ function delay(ms) {
     return new Promise(r => setTimeout(r, ms));
 }
 
-async function runBattle() {
+function buildPlayerUnits() {
     const stabBonus = state.resources.stability < 30 ? -2 : state.resources.stability > 70 ? 2 : 0;
     const defBonus = state.buildings.includes('bouclier') ? 2 : 0;
-    const playerUnits = state.army.map((id, i) => {
+    return state.army.map((id, i) => {
         const d = UNITS.find(u => u.id === id);
         return {
             uid: 'p' + i,
@@ -158,13 +158,18 @@ async function runBattle() {
             dodge: d.dodge || 0
         };
     });
+}
+
+function simulateBattle() {
+    const playerUnits = buildPlayerUnits();
     const enemyUnits = generateWave(state.wave);
-    battleState = {player: playerUnits, enemy: enemyUnits, log: [], round: 0};
-    renderBattle();
-    await delay(600 / battleSpeed);
+    const initial = structuredClone({player: playerUnits, enemy: enemyUnits});
+    const events = [];
+    let round = 0;
 
     while (playerUnits.some(u => u.hp > 0) && enemyUnits.some(u => u.hp > 0)) {
-        battleState.round++;
+        round++;
+        events.push({t: 'round', round});
         const order = [...playerUnits, ...enemyUnits].filter(u => u.hp > 0).sort((a, b) => b.spd - a.spd);
 
         for (const unit of order) {
@@ -174,45 +179,132 @@ async function runBattle() {
             const target = selectTarget(unit, enemies);
 
             if (target.dodge && Math.random() < target.dodge) {
-                battleState.log.push({text: unit.icon + ' → ' + target.icon + ' Esquivé !', type: 'dodge'});
-                renderBattle();
-                showFloat(target.uid, 'Esquivé', 'dodge');
-                await delay(300 / battleSpeed);
+                events.push({t: 'dodge', src: unit.uid, tgt: target.uid});
                 continue;
             }
 
             const dmg = Math.max(1, unit.atk - target.def);
             target.hp = Math.max(0, target.hp - dmg);
-            const killed = target.hp <= 0;
-            battleState.log.push({
-                text: unit.icon + ' ' + unit.name + ' → ' + target.icon + ' ' + target.name + ' -' + dmg + ' PV' + (killed ? ' ☠️' : ''),
-                type: killed ? 'kill' : 'hit'
-            });
-            renderBattle();
-            highlightCard(unit.uid, 'attacking');
-            highlightCard(target.uid, 'hit');
-            showFloat(target.uid, '-' + dmg, 'damage');
-            await delay(350 / battleSpeed);
-            clearHighlights();
+            events.push({t: 'attack', src: unit.uid, tgt: target.uid, dmg, kill: target.hp <= 0, hp: target.hp});
         }
 
+        const heals = [];
         for (const u of playerUnits) {
             if (u.hp > 0 && u.heals > 0) {
                 const heal = Math.min(u.heals, u.maxHp - u.hp);
                 if (heal > 0) {
                     u.hp += heal;
-                    battleState.log.push({text: u.icon + ' +' + heal + ' PV', type: 'heal'});
-                    showFloat(u.uid, '+' + heal, 'heal');
+                    heals.push({uid: u.uid, amount: heal, hp: u.hp});
                 }
             }
         }
-        renderBattle();
-        await delay(200 / battleSpeed);
+        events.push({t: 'roundEnd', heals});
     }
 
     const won = playerUnits.some(u => u.hp > 0);
-    await showResult(won);
-    return {won, survivors: playerUnits.filter(u => u.hp > 0).map(u => u.id)};
+    return {events, won, survivors: playerUnits.filter(u => u.hp > 0).map(u => u.id), initial};
+}
+
+async function playBattle(sim) {
+    battleState = {player: sim.initial.player, enemy: sim.initial.enemy, log: [], round: 0};
+    const byUid = {};
+    [...battleState.player, ...battleState.enemy].forEach(u => byUid[u.uid] = u);
+    renderBattle();
+    await delay(600 / battleSpeed);
+
+    for (const ev of sim.events) {
+        if (ev.t === 'round') {
+            battleState.round = ev.round;
+        } else if (ev.t === 'dodge') {
+            const src = byUid[ev.src], tgt = byUid[ev.tgt];
+            battleState.log.push({text: src.icon + ' → ' + tgt.icon + ' Esquivé !', type: 'dodge'});
+            renderBattle();
+            showFloat(tgt.uid, 'Esquivé', 'dodge');
+            await delay(300 / battleSpeed);
+        } else if (ev.t === 'attack') {
+            const src = byUid[ev.src], tgt = byUid[ev.tgt];
+            tgt.hp = ev.hp;
+            battleState.log.push({
+                text: src.icon + ' ' + src.name + ' → ' + tgt.icon + ' ' + tgt.name + ' -' + ev.dmg + ' PV' + (ev.kill ? ' ☠️' : ''),
+                type: ev.kill ? 'kill' : 'hit'
+            });
+            renderBattle();
+            highlightCard(src.uid, 'attacking');
+            highlightCard(tgt.uid, 'hit');
+            showFloat(tgt.uid, '-' + ev.dmg, 'damage');
+            await delay(350 / battleSpeed);
+            clearHighlights();
+        } else if (ev.t === 'roundEnd') {
+            for (const h of ev.heals) {
+                const u = byUid[h.uid];
+                u.hp = h.hp;
+                battleState.log.push({text: u.icon + ' +' + h.amount + ' PV', type: 'heal'});
+                showFloat(u.uid, '+' + h.amount, 'heal');
+            }
+            renderBattle();
+            await delay(200 / battleSpeed);
+        }
+    }
+
+    await showResult(sim.won);
+}
+
+async function playBattle3D(sim) {
+    battleState = {player: sim.initial.player, enemy: sim.initial.enemy, log: [], round: 0, mode: '3d'};
+    renderBattle();
+    await Battle3D.ready();
+    Battle3D.mount(document.getElementById('battle3d-view'));
+    Battle3D.setup(battleState.player, battleState.enemy);
+    const byUid = {};
+    [...battleState.player, ...battleState.enemy].forEach(u => byUid[u.uid] = u);
+    await delay(600 / battleSpeed);
+
+    for (const ev of sim.events) {
+        if (ev.t === 'round') {
+            battleState.round = ev.round;
+            renderBattle();
+        } else if (ev.t === 'dodge') {
+            const src = byUid[ev.src], tgt = byUid[ev.tgt];
+            battleState.log.push({text: src.icon + ' → ' + tgt.icon + ' Esquivé !', type: 'dodge'});
+            renderBattle();
+            await Battle3D.play(ev, 340 / battleSpeed);
+        } else if (ev.t === 'attack') {
+            const src = byUid[ev.src], tgt = byUid[ev.tgt];
+            tgt.hp = ev.hp;
+            battleState.log.push({
+                text: src.icon + ' ' + src.name + ' → ' + tgt.icon + ' ' + tgt.name + ' -' + ev.dmg + ' PV' + (ev.kill ? ' ☠️' : ''),
+                type: ev.kill ? 'kill' : 'hit'
+            });
+            renderBattle();
+            await Battle3D.play(ev, 420 / battleSpeed);
+        } else if (ev.t === 'roundEnd') {
+            for (const h of ev.heals) {
+                const u = byUid[h.uid];
+                u.hp = h.hp;
+                battleState.log.push({text: u.icon + ' +' + h.amount + ' PV', type: 'heal'});
+            }
+            renderBattle();
+            await Battle3D.play(ev, 200 / battleSpeed);
+        }
+    }
+
+    await showResult(sim.won);
+    Battle3D.stop();
+}
+
+async function runBattle() {
+    const sim = simulateBattle();
+    if (window.Battle3D && Battle3D.supported) {
+        try {
+            await playBattle3D(sim);
+        } catch (e) {
+            Battle3D.stop();
+            await playBattle(sim);
+        }
+    } else {
+        await playBattle(sim);
+    }
+    return {won: sim.won, survivors: sim.survivors};
 }
 
 function highlightCard(uid, cls) {
@@ -281,10 +373,24 @@ function dismissUnit(idx) {
     render();
 }
 
+function phaseSwitch(cb) {
+    const f = document.getElementById('phase-fade');
+    f.classList.add('active');
+    return new Promise(resolve => {
+        setTimeout(() => {
+            cb();
+            setTimeout(() => {
+                f.classList.remove('active');
+                resolve();
+            }, 60);
+        }, 460);
+    });
+}
+
 async function launchBattle() {
     if (state.army.length === 0 || state.phase !== 'build') return;
     state.phase = 'battle';
-    render();
+    await phaseSwitch(() => render());
     const result = await runBattle();
     battleState = null;
 
@@ -349,7 +455,7 @@ async function launchBattle() {
 
     state.phase = 'build';
     save();
-    render();
+    await phaseSwitch(() => render());
     processNext();
 }
 
