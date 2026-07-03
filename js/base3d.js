@@ -13,8 +13,15 @@ let resizeObserver = null;
 let rafId = null;
 let clock = null;
 let hqTop = null;
+let hqGroup = null;
+let hqCoreLevel = 1;
+let hqRing2 = null;
+let hqRing3 = null;
 let slots = [];
 let built = new Map();
+let satellites = [];
+
+const RESEARCH_BRANCH_COLORS = Object.fromEntries(Object.entries(RESEARCH_BRANCHES).map(([k, b]) => [k, parseInt(b.color.slice(1), 16)]));
 
 function ease(fn, dur, onUpdate) {
     return new Promise((resolve) => {
@@ -112,7 +119,60 @@ function buildHq() {
     group.add(top);
 
     hqTop = top;
+    hqGroup = group;
     scene.add(group);
+}
+
+function pulse(group, targetScale) {
+    const from = group.scale.x;
+    const peak = from * 1.25;
+    ease((t) => t, 160, (t) => {
+        const s = from + (peak - from) * t;
+        group.scale.set(s, s, s);
+    }).then(() => {
+        ease((t) => t, 240, (t) => {
+            const s = peak + (targetScale - peak) * t;
+            group.scale.set(s, s, s);
+        });
+    });
+}
+
+function flashEmissive(group, boost, dur) {
+    const targets = [];
+    group.traverse((o) => {
+        if (o.isMesh && o.material && o.material.emissive && o.material.emissiveIntensity > 0) {
+            targets.push({ mat: o.material, base: o.material.emissiveIntensity });
+        }
+    });
+    ease((t) => t, dur, (t) => {
+        const k = Math.sin(t * Math.PI);
+        targets.forEach((tg) => {
+            tg.mat.emissiveIntensity = tg.base + tg.base * boost * k;
+        });
+    });
+}
+
+function applyCoreVisual(levelUp) {
+    if (!hqGroup) return;
+    if (hqCoreLevel >= 2 && !hqRing2) {
+        const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.05), accentMat(0x00d4ff, 1.2));
+        ring2.rotation.x = Math.PI / 2;
+        ring2.position.y = 2.0;
+        hqGroup.add(ring2);
+        hqRing2 = ring2;
+    }
+    if (hqCoreLevel >= 3 && !hqRing3) {
+        const ring3 = new THREE.Mesh(new THREE.TorusGeometry(1.7, 0.05), accentMat(0x00d4ff, 1.2));
+        ring3.rotation.x = Math.PI / 2;
+        ring3.position.y = 2.7;
+        hqGroup.add(ring3);
+        hqRing3 = ring3;
+        if (hqTop) hqTop.scale.setScalar(1.3);
+    }
+    if (levelUp) {
+        pulse(hqGroup, 1);
+        flashEmissive(hqGroup, 1.2, 700);
+    }
 }
 
 function buildSlots() {
@@ -362,10 +422,43 @@ function createBuildingGroup(id, slot) {
     return {group, animators: anim};
 }
 
-function popIn(group) {
+function levelRing(radius) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.035), accentMat(0x00d4ff, 1));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.06;
+    return ring;
+}
+
+function applyBuildingLevel(entry, lvl, isLevelUp) {
+    const targetScale = 1 + (lvl - 1) * 0.18;
+    if (!entry.ring2 && lvl >= 2) {
+        entry.ring2 = levelRing(1.05);
+        entry.group.add(entry.ring2);
+    }
+    if (!entry.ring3 && lvl >= 3) {
+        entry.ring3 = levelRing(1.25);
+        entry.group.add(entry.ring3);
+        entry.group.traverse((o) => {
+            if (o.isMesh && o.material && o.material.emissive && o.material.emissive.getHex() !== 0x000000) {
+                o.material.emissiveIntensity *= 1.35;
+            }
+        });
+    }
+    entry.level = lvl;
+    if (isLevelUp) {
+        pulse(entry.group, targetScale);
+        flashEmissive(entry.group, 1, 500);
+    } else {
+        entry.group.scale.set(targetScale, targetScale, targetScale);
+    }
+}
+
+function popIn(group, targetScale) {
+    const target = targetScale || 1;
     group.scale.set(0.01, 0.01, 0.01);
     ease(easeOutBack, 500, (t) => {
-        group.scale.set(t, t, t);
+        const s = t * target;
+        group.scale.set(s, s, s);
     });
 }
 
@@ -378,7 +471,18 @@ function animate() {
     if (hqTop) {
         hqTop.material.emissiveIntensity = 1.15 + Math.sin(time * 1.4) * 0.45;
     }
+    if (hqRing2) hqRing2.rotation.z += delta * 0.4;
+    if (hqRing3) hqRing3.rotation.z -= delta * 0.4;
     built.forEach((b) => b.animators.forEach((fn) => fn(delta)));
+    satellites.forEach((s) => {
+        s.angle += s.speed * delta;
+        s.mesh.position.set(
+            Math.cos(s.angle) * s.radius,
+            s.height + Math.sin(s.angle * 2) * 0.08,
+            Math.sin(s.angle) * s.radius
+        );
+        s.mesh.rotation.y += delta;
+    });
 
     if (renderer && scene && camera) renderer.render(scene, camera);
 }
@@ -432,23 +536,85 @@ function mount(el) {
     animate();
 }
 
-function sync(buildingIds) {
+function syncSatellites(researchBranches) {
+    const branches = researchBranches || [];
+    if (branches.length === satellites.length) return;
+
+    satellites.forEach((s) => {
+        scene.remove(s.mesh);
+        s.mesh.geometry.dispose();
+        s.mesh.material.dispose();
+    });
+    satellites = [];
+
+    branches.forEach((branch, i) => {
+        const color = RESEARCH_BRANCH_COLORS[branch] !== undefined ? RESEARCH_BRANCH_COLORS[branch] : 0xffffff;
+        const mesh = new THREE.Mesh(
+            new THREE.OctahedronGeometry(0.14),
+            new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.3, emissive: new THREE.Color(color), emissiveIntensity: 1.1 })
+        );
+        scene.add(mesh);
+        const s = {
+            mesh,
+            radius: 2.4 + (i % 3) * 0.5,
+            height: 2.3 + i * 0.28,
+            speed: 0.35 + (i % 4) * 0.12,
+            angle: i * 2.4
+        };
+        satellites.push(s);
+        popIn(mesh, 1);
+    });
+}
+
+function sync(buildingIds, levels, coreLevel, researchBranches) {
     if (!scene) return;
     const ids = buildingIds || [];
+    const lvls = levels || {};
+    const core = coreLevel || 1;
+
+    syncSatellites(researchBranches);
+
     [...built.keys()].forEach((id) => {
         if (!ids.includes(id)) removeBuilding(id);
     });
     ids.forEach((id) => {
-        if (built.has(id)) return;
+        const lvl = lvls[id] || 1;
+        if (built.has(id)) {
+            const entry = built.get(id);
+            if (lvl > entry.level) applyBuildingLevel(entry, lvl, true);
+            return;
+        }
         const slot = slots.find((s) => !s.occupied);
         if (!slot) return;
         slot.occupied = true;
         slot.disk.visible = false;
 
         const b = createBuildingGroup(id, slot);
-        popIn(b.group);
-        built.set(id, {group: b.group, animators: b.animators, slot});
+        const entry = {group: b.group, animators: b.animators, slot, level: 1, ring2: null, ring3: null};
+        built.set(id, entry);
+        applyBuildingLevel(entry, lvl, false);
+        popIn(b.group, 1 + (lvl - 1) * 0.18);
     });
+
+    if (core > hqCoreLevel) {
+        hqCoreLevel = core;
+        applyCoreVisual(true);
+    } else if (core < hqCoreLevel) {
+        hqCoreLevel = core;
+        if (hqRing2 && core < 2) {
+            hqGroup.remove(hqRing2);
+            hqRing2.geometry.dispose();
+            hqRing2.material.dispose();
+            hqRing2 = null;
+        }
+        if (hqRing3 && core < 3) {
+            hqGroup.remove(hqRing3);
+            hqRing3.geometry.dispose();
+            hqRing3.material.dispose();
+            hqRing3 = null;
+            if (hqTop) hqTop.scale.setScalar(1);
+        }
+    }
 }
 
 function stop() {

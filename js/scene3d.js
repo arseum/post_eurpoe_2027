@@ -14,7 +14,10 @@ const UNIT3D = {
     eclaireur: { tint: 0xf97316, scale: 0.5 },
     blinde: { tint: 0x991b1b, scale: 0.78 },
     commandant: { tint: 0xf59e0b, scale: 0.7 },
-    destroyer: { tint: 0x7f1d1d, scale: 0.95 }
+    destroyer: { tint: 0x7f1d1d, scale: 0.95 },
+    valkyrie: { tint: 0xfacc15, scale: 0.85 },
+    oracle: { tint: 0x34d399, scale: 0.72 },
+    avatar: { tint: 0xc084fc, scale: 0.8 }
 };
 
 let modelGltf = null;
@@ -263,6 +266,16 @@ function createModelUnit(u, side, x, z) {
     });
     group.add(inst);
 
+    if (u.hero) {
+        const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(0.62, 0.035, 8, 32),
+            new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.3, emissive: new THREE.Color(0xfacc15), emissiveIntensity: 1.2 })
+        );
+        ring.rotation.x = Math.PI / 2;
+        ring.position.y = 0.05;
+        group.add(ring);
+    }
+
     const mixer = new THREE.AnimationMixer(inst);
     const actions = {};
     for (const clip of modelGltf.animations) {
@@ -482,17 +495,6 @@ async function handleAttack(ev, dur) {
     });
 
     if (tgt.alive) {
-        flashMaterial(tgt);
-        if (window.FX3D) {
-            const iy = (tgt.floatY || 2.6) * 0.45;
-            if (ev.kill) {
-                FX3D.burst(tgt.group.position.x, iy, tgt.group.position.z, { color: 0xef4444, count: 26, speed: 4.2, size: 0.11, life: 0.7 });
-                shake(0.3);
-            } else {
-                FX3D.burst(tgt.group.position.x, iy, tgt.group.position.z, { color: 0xffc857, count: 12, speed: 3 });
-                shake(0.07);
-            }
-        }
         const tgtBaseX = tgt.baseX;
         const tgtBaseZ = tgt.baseZ;
         const dirX = tgt.baseX - src.baseX;
@@ -510,18 +512,79 @@ async function handleAttack(ev, dur) {
             });
         });
 
-        spawnFloat(tgt, 'damage', '-' + ev.dmg);
-        if (typeof ev.hp === 'number') updateHp(tgt, ev.hp, tgt.maxHp);
-
-        if (ev.kill) {
-            killUnit(tgt, tgt.side, dur * 0.5);
-        }
+        impactOn(tgt, ev.dmg, ev.kill, ev.hp, dur * 0.5);
     }
 
     await ease(easeInCubic, dur * 0.35, (t) => {
         src.group.position.x = advX + (src.baseX - advX) * t;
         src.group.position.z = advZ + (src.baseZ - advZ) * t;
     });
+}
+
+function impactOn(tgt, dmg, kill, hp, dur) {
+    if (!tgt || !tgt.alive) return;
+    flashMaterial(tgt);
+    if (window.FX3D) {
+        const iy = (tgt.floatY || 2.6) * 0.45;
+        if (kill) {
+            FX3D.burst(tgt.group.position.x, iy, tgt.group.position.z, { color: 0xef4444, count: 26, speed: 4.2, size: 0.11, life: 0.7 });
+            shake(0.3);
+        } else {
+            FX3D.burst(tgt.group.position.x, iy, tgt.group.position.z, { color: 0xffc857, count: 12, speed: 3 });
+            shake(0.07);
+        }
+    }
+    spawnFloat(tgt, 'damage', '-' + dmg);
+    if (typeof hp === 'number') updateHp(tgt, hp, tgt.maxHp);
+    if (kill) killUnit(tgt, tgt.side, dur);
+}
+
+async function handleAbility(ev, dur) {
+    const src = units.get(ev.src);
+    if (ev.kind === 'aura') {
+        if (src) {
+            flashMaterial(src);
+            if (window.FX3D) FX3D.rise(src.group.position.x, 0.5, src.group.position.z, { color: 0xc084fc, count: 24, life: 1.2 });
+            units.forEach((u) => {
+                if (u.alive && u.side === src.side && u !== src) flashMaterial(u);
+            });
+        }
+        await new Promise((r) => setTimeout(r, dur));
+        return;
+    }
+    if (ev.kind === 'cleave') {
+        if (!src || !src.alive) return;
+        const tgt = units.get(ev.tgt);
+        const tgt2 = units.get(ev.tgt2);
+        if (!tgt) return;
+
+        if (src.actions && src.actions.Punch) {
+            const punch = src.actions.Punch;
+            const fit = (punch.getClip().duration * 1000) / Math.max(dur * 0.9, 200);
+            punch.reset();
+            punch.setLoop(THREE.LoopOnce);
+            punch.clampWhenFinished = true;
+            punch.timeScale = Math.min(3.5, Math.max(0.9, fit));
+            if (src.actions.Idle) src.actions.Idle.fadeOut(0.1);
+            punch.fadeIn(0.1).play();
+        }
+
+        const advX = src.baseX + (tgt.baseX - src.baseX) * 0.55;
+        const advZ = src.baseZ + (tgt.baseZ - src.baseZ) * 0.55;
+        await ease(easeOutCubic, dur * 0.35, (t) => {
+            src.group.position.x = src.baseX + (advX - src.baseX) * t;
+            src.group.position.z = src.baseZ + (advZ - src.baseZ) * t;
+        });
+
+        impactOn(tgt, ev.dmg, ev.kill, ev.hp, dur * 0.5);
+        impactOn(tgt2, ev.dmg2, ev.kill2, ev.hp2, dur * 0.5);
+
+        await ease(easeInCubic, dur * 0.35, (t) => {
+            src.group.position.x = advX + (src.baseX - advX) * t;
+            src.group.position.z = advZ + (src.baseZ - advZ) * t;
+        });
+        return;
+    }
 }
 
 async function handleDodge(ev, dur) {
@@ -560,6 +623,9 @@ async function play(ev, dur) {
                 break;
             case 'dodge':
                 await handleDodge(ev, dur);
+                break;
+            case 'ability':
+                await handleAbility(ev, dur);
                 break;
             case 'roundEnd':
                 await handleRoundEnd(ev, dur);

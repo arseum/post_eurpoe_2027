@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Post-Europe 2147</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=43">
     <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
     </script>
@@ -31,7 +31,8 @@
             <div id="right-panel"></div>
         </div>
         <div id="bottom-bar">
-            <button id="btn-battle" onclick="launchBattle()">LANCER LE COMBAT ▶</button>
+            <button id="btn-endturn" onclick="endTurn()">FIN DE TOUR ▶</button>
+            <button id="btn-research" onclick="toggleResearch()">🧠 RECHERCHE</button>
             <button class="speed-btn" id="spd1" onclick="setSpeed(1)">×1</button>
             <button class="speed-btn" id="spd2" onclick="setSpeed(2)">×2</button>
             <button class="speed-btn" id="spd3" onclick="setSpeed(3)">×3</button>
@@ -41,22 +42,25 @@
     <div id="g-tooltip"></div>
     <div id="event-overlay" class="overlay"></div>
     <div id="chapter-overlay" class="overlay"></div>
+    <div id="research-overlay" class="overlay"></div>
     <div id="phase-fade"></div>
     <div id="end-screen" class="screen">
         <div id="end-content"></div>
     </div>
 </div>
-<script type="module" src="js/scene3d.js"></script>
-<script type="module" src="js/base3d.js"></script>
-<script type="module" src="js/fx3d.js"></script>
-<script src="js/version.js"></script>
-<script src="js/data.js"></script>
-<script src="js/game.js"></script>
-<script src="js/render.js"></script>
+<script type="module" src="js/scene3d.js?v=43"></script>
+<script type="module" src="js/base3d.js?v=43"></script>
+<script type="module" src="js/map3d.js?v=43"></script>
+<script type="module" src="js/fx3d.js?v=43"></script>
+<script src="js/version.js?v=43"></script>
+<script src="js/data.js?v=43"></script>
+<script src="js/game.js?v=43"></script>
+<script src="js/render.js?v=43"></script>
 <script>
     initTooltip();
-    document.getElementById('version-label').textContent = 'v' + VERSION;
-    document.getElementById('game-version-label').textContent = 'v' + VERSION;
+    const _v = typeof VERSION !== 'undefined' ? VERSION : 'dev';
+    document.getElementById('version-label').textContent = 'v' + _v;
+    document.getElementById('game-version-label').textContent = 'v' + _v;
     setSpeed(1);
     checkContinue();
 </script>

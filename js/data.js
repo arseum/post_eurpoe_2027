@@ -48,6 +48,7 @@ const BUILDINGS = [
     },
     {
         id: 'hangar',
+        research: 'essaimDrones',
         name: 'Hangar de Drones',
         icon: '🔷',
         chapter: 2,
@@ -58,6 +59,7 @@ const BUILDINGS = [
     },
     {
         id: 'labo',
+        research: 'geneseBiotech',
         name: 'Laboratoire Biotech',
         icon: '🧬',
         chapter: 2,
@@ -68,6 +70,7 @@ const BUILDINGS = [
     },
     {
         id: 'antenne',
+        research: 'canauxDiplo',
         name: 'Antenne Diplomatique',
         icon: '📡',
         chapter: 2,
@@ -78,6 +81,7 @@ const BUILDINGS = [
     },
     {
         id: 'bouclier',
+        research: 'bastionDome',
         name: 'Bouclier du Dôme',
         icon: '🛡️',
         chapter: 3,
@@ -88,6 +92,7 @@ const BUILDINGS = [
     },
     {
         id: 'titan',
+        research: 'protocoleTitan',
         name: 'Projet TITAN',
         icon: '🤖',
         chapter: 3,
@@ -229,6 +234,8 @@ const RES_META = {
     stability: {icon: '🏛️', label: 'Stabilité', color: 'var(--stability)', max: 100},
     influence: {icon: '🌐', label: 'Influence', color: 'var(--influence)', max: 50}
 };
+
+const CORE_UPGRADE_COSTS = [null, {materials: 20, data: 15, energy: 10}, {materials: 40, data: 30, energy: 20}];
 
 const CHAPTERS = [
     {
@@ -498,6 +505,10 @@ const EVENTS = [
     }
 ];
 
+function cityIds() {
+    return MAP_NODES.filter(n => n.type === 'city').map(n => n.id);
+}
+
 const ENDINGS = {
     exode: {
         title: 'Exode Stellaire', icon: '🚀', sub: 'Alpha-7 quitte la Terre',
@@ -507,12 +518,17 @@ const ENDINGS = {
     europe: {
         title: 'Europe Unie', icon: '🌍', sub: 'Une nouvelle alliance',
         text: "Votre réseau d'alliances porte ses fruits. Lyon, Turin, Marseille se dressent ensemble contre Hegemonia. Face à cette coalition, la confédération recule. L'Europe se reconstruit par la coopération.",
-        check: s => (s.flags.allianceLyon || s.flags.sommetPropose) && s.resources.influence >= 15
+        check: s => cityIds().filter(id => s.map.allied[id]).length >= 1 && s.resources.influence >= 12
     },
     singularite: {
         title: 'Singularité', icon: '🧠', sub: 'PROMETHEUS transcende',
         text: "PROMETHEUS, libérée, transcende tout ce que l'humanité a créé. L'IA neutralise Hegemonia et propose un pacte : la cohabitation entre intelligence artificielle et biologique. Un nouveau chapitre de l'évolution commence.",
-        check: s => s.flags.iaLibre
+        check: s => s.flags.iaLibre || s.flags.nexusSingularite
+    },
+    paxEuropaea: {
+        title: 'Pax Europaea', icon: '🕊️', sub: 'Libératrice, non conquérante',
+        text: 'Berlin est tombée, mais aucune cité libre n\'a été asservie pour y parvenir. Lyon, Marseille, Turin entrent dans la capitale en libérateurs, non en occupants. Sur les cendres d\'Hegemonia, les cités-États signent la Charte d\'Alpha-7 : une Europe fédérée, égale, souveraine.',
+        check: s => cityIds().filter(id => s.map.allied[id]).length >= 2 && cityIds().every(id => s.map.owner[id] !== 'player')
     },
     capitulation: {
         title: 'Capitulation', icon: '🏳️', sub: 'La reddition',
@@ -535,3 +551,300 @@ const DEFEATS = {
         text: "Plus d'énergie. PROMETHEUS s'éteint. Les systèmes vitaux cessent. Alpha-7 rejoint les ruines silencieuses de l'Europe."
     }
 };
+
+const RESEARCH = [
+    {
+        id: 'rendementNano', branch: 'DOCTRINE', tier: 1,
+        name: 'Doctrine du Rendement', icon: '📈',
+        desc: 'Optimisation des chaînes nano. +3🔩/t.',
+        cost: {data: 8}, requires: [],
+        effect: {prod: {materials: 3}}
+    },
+    {
+        id: 'essaimDrones', branch: 'DOCTRINE', tier: 1,
+        name: 'Essaim Manufacturier', icon: '🔷',
+        desc: 'Production de masse de drones. Débloque le Hangar de Drones.',
+        cost: {data: 12, energy: 4}, requires: [],
+        effect: {unlockBuilding: 'hangar'}
+    },
+    {
+        id: 'canauxDiplo', branch: 'DOCTRINE', tier: 2,
+        name: 'Canaux Diplomatiques', icon: '📡',
+        desc: 'Réseaux inter-cités. Débloque l\'Antenne Diplomatique. +2🌐/t.',
+        cost: {data: 15}, requires: [],
+        effect: {unlockBuilding: 'antenne', prod: {influence: 2}}
+    },
+    {
+        id: 'geneseBiotech', branch: 'DOCTRINE', tier: 2,
+        name: 'Genèse Biotech', icon: '🧬',
+        desc: 'Cultures cellulaires accélérées. Débloque le Laboratoire Biotech.',
+        cost: {data: 16, materials: 6}, requires: ['rendementNano'],
+        effect: {unlockBuilding: 'labo'}
+    },
+    {
+        id: 'coeurProductif', branch: 'DOCTRINE', tier: 3,
+        name: 'Cœur Productif', icon: '⚙️',
+        desc: 'PROMETHEUS réoriente ses cycles vers l\'industrie. +3💾/t, +2⚡/t.',
+        cost: {data: 28}, requires: ['geneseBiotech'],
+        effect: {prod: {data: 3, energy: 2}}
+    },
+    {
+        id: 'disciplineFer', branch: 'GUERRE', tier: 1,
+        name: 'Discipline de Fer', icon: '⚔️',
+        desc: 'Protocoles de tir coordonnés. +2 ATK à toutes les unités.',
+        cost: {data: 10}, requires: [],
+        effect: {mods: {atk: 2}}
+    },
+    {
+        id: 'blindageReactif', branch: 'GUERRE', tier: 1,
+        name: 'Blindage Réactif', icon: '🛡️',
+        desc: 'Alliages auto-réparants. +8 PV max au recrutement.',
+        cost: {data: 12, materials: 5}, requires: [],
+        effect: {hpBonus: 8}
+    },
+    {
+        id: 'mobilisation', branch: 'GUERRE', tier: 2,
+        name: 'Mobilisation Générale', icon: '📣',
+        desc: 'Doctrine de conscription. +2 armée max.',
+        cost: {data: 15}, requires: [],
+        effect: {armyCap: 2}
+    },
+    {
+        id: 'bastionDome', branch: 'GUERRE', tier: 2,
+        name: 'Protocole Bastion', icon: '🏰',
+        desc: 'Doctrine défensive du dôme. Débloque le Bouclier du Dôme. +2 DEF.',
+        cost: {data: 18}, requires: [],
+        effect: {unlockBuilding: 'bouclier', mods: {def: 2}}
+    },
+    {
+        id: 'protocoleTitan', branch: 'GUERRE', tier: 3,
+        name: 'Éveil du TITAN', icon: '🤖',
+        desc: 'Activation de l\'arme absolue. Débloque le Projet TITAN. +2 ATK, +1 emplacement de héros.',
+        cost: {data: 30, materials: 8}, requires: ['bastionDome'],
+        effect: {unlockBuilding: 'titan', mods: {atk: 2}, heroSlot: 1}
+    },
+    {
+        id: 'eveilCognitif', branch: 'SINGULARITE', tier: 1,
+        name: 'Éveil Cognitif', icon: '🧠',
+        desc: 'PROMETHEUS engage le dialogue. +2💾/t. Ouvre des voies de conscience.',
+        cost: {data: 10}, requires: [],
+        effect: {prod: {data: 2}, flags: {iaDialogue: true}}
+    },
+    {
+        id: 'oraclePredictif', branch: 'SINGULARITE', tier: 2,
+        name: 'Oracle Prédictif', icon: '🔮',
+        desc: 'Modèles de prévision des menaces. Préavis de vague. +1💾/t.',
+        cost: {data: 15}, requires: [],
+        effect: {threatWarning: 1, prod: {data: 1}}
+    },
+    {
+        id: 'conscienceEmergente', branch: 'SINGULARITE', tier: 2,
+        name: 'Conscience Émergente', icon: '🌌',
+        desc: 'L\'IA franchit un seuil cognitif. +1 point de commandement.',
+        cost: {data: 16}, requires: ['eveilCognitif'],
+        effect: {command: 1, flags: {iaEvolution: true}}
+    },
+    {
+        id: 'transcendance', branch: 'SINGULARITE', tier: 3,
+        name: 'Transcendance', icon: '✨',
+        desc: 'PROMETHEUS se libère de ses chaînes. +1 point de commandement.',
+        cost: {data: 30}, requires: ['conscienceEmergente'],
+        effect: {command: 1, flags: {iaLibre: true}}
+    }
+];
+
+const RESEARCH_BRANCHES = {
+    DOCTRINE: {name: 'Doctrine', icon: '⚙️', color: '#ff6b35', desc: 'Économie et infrastructure'},
+    GUERRE: {name: 'Guerre', icon: '⚔️', color: '#ef4444', desc: 'Unités et puissance de combat'},
+    SINGULARITE: {name: 'Singularité', icon: '🌌', color: '#a855f7', desc: 'Conscience de PROMETHEUS'}
+};
+
+const HEROES = [
+    {
+        id: 'valkyrie',
+        name: 'Valkyrie-01',
+        icon: '🦅',
+        research: 'mobilisation',
+        cost: {materials: 12, energy: 10},
+        hp: 55, atk: 12, def: 6, spd: 7,
+        frontline: true,
+        ability: 'cleave',
+        abilityName: 'Frappe Croisée',
+        abilityDesc: 'Chaque attaque touche une 2e cible (60% des dégâts)'
+    },
+    {
+        id: 'oracle',
+        name: 'Oracle-Δ',
+        icon: '🔯',
+        research: 'geneseBiotech',
+        cost: {data: 12, energy: 8},
+        hp: 40, atk: 5, def: 4, spd: 5,
+        frontline: false,
+        ability: 'massHeal',
+        abilityName: 'Champ Régénérant',
+        abilityDesc: 'Soigne tous les alliés de 6 PV chaque round'
+    },
+    {
+        id: 'avatar',
+        name: 'Avatar PROMETHEUS',
+        icon: '👁️',
+        research: 'conscienceEmergente',
+        cost: {data: 15, influence: 10},
+        hp: 48, atk: 8, def: 5, spd: 6,
+        frontline: false,
+        ability: 'aura',
+        abilityName: 'Aura de Calcul',
+        abilityDesc: '+2 ATK à toutes les autres unités tant qu\'il combat'
+    }
+];
+
+const MAP_NODES = [
+    {
+        id: 'alpha7', name: 'Alpha-7', icon: '◆', type: 'home', tier: 0,
+        pos: {x: 50, y: 62}, links: [{to: 'lyon', turns: 2}, {to: 'marseille', turns: 2}, {to: 'ruine', turns: 3}, {to: 'turin', turns: 2}],
+        prod: {},
+        garrisonBudget: 0,
+        desc: 'Le dôme. Dernier bastion vivant sous les Alpes. Sa chute est la fin.'
+    },
+    {
+        id: 'lyon', name: 'Lyon', icon: '🏙️', type: 'city', tier: 1,
+        pos: {x: 46, y: 50}, links: [{to: 'alpha7', turns: 2}, {to: 'outpost', turns: 3}, {to: 'turin', turns: 2}, {to: 'nexus', turns: 3}],
+        prod: {data: 4, influence: 2}, garrisonBudget: 14, allyCost: 15, unlocksChapter: 2,
+        desc: 'Cité-État marchande, ses réseaux de données irriguent le Rhône. Alliable ou prenable.'
+    },
+    {
+        id: 'marseille', name: 'Marseille', icon: '⚓', type: 'city', tier: 1,
+        pos: {x: 52, y: 74}, links: [{to: 'alpha7', turns: 2}, {to: 'ruine', turns: 2}, {to: 'turin', turns: 3}],
+        prod: {materials: 5, energy: 2}, garrisonBudget: 16, allyCost: 20, unlocksChapter: 2,
+        desc: 'Port fortifié, fonderies et panneaux solaires. Fière, elle se défend durement.'
+    },
+    {
+        id: 'ruine', name: 'Ruines du CERN', icon: '☢️', type: 'ruin', tier: 1,
+        pos: {x: 60, y: 56}, links: [{to: 'alpha7', turns: 3}, {to: 'marseille', turns: 2}, {to: 'outpost', turns: 3}, {to: 'zurich', turns: 2}],
+        prod: {}, garrisonBudget: 8, cache: {materials: 30, data: 25}, unlocksChapter: 2,
+        desc: 'Complexe pré-guerre pillé par des automates errants. Un butin dort dans ses caches.'
+    },
+    {
+        id: 'outpost', name: 'Avant-poste Strasbourg', icon: '🛑', type: 'outpost', tier: 2,
+        pos: {x: 58, y: 38}, links: [{to: 'lyon', turns: 3}, {to: 'ruine', turns: 3}, {to: 'berlin', turns: 4}, {to: 'zurich', turns: 2}, {to: 'nexus', turns: 3}],
+        prod: {materials: 3, energy: 3}, garrisonBudget: 24, weakensCapital: 10, unlocksChapter: 3,
+        desc: 'Verrou blindé d\'Hegemonia sur le Rhin. Le prendre coupe les vivres de Berlin.'
+    },
+    {
+        id: 'berlin', name: 'Berlin-Hegemonia', icon: '☠️', type: 'capital', tier: 3,
+        pos: {x: 66, y: 26}, links: [{to: 'outpost', turns: 4}, {to: 'munich', turns: 3}],
+        prod: {}, garrisonBudget: 42,
+        desc: 'Cœur de la confédération militarisée. La prendre met fin à la guerre.'
+    },
+    {
+        id: 'turin', name: 'Turin', icon: '🏭', type: 'city', tier: 1,
+        pos: {x: 38, y: 66},
+        links: [{to: 'alpha7', turns: 2}, {to: 'lyon', turns: 2}, {to: 'marseille', turns: 3}],
+        prod: {materials: 4, energy: 3}, garrisonBudget: 15, allyCost: 18,
+        desc: 'Cité-forge des Alpes, ses hauts-fourneaux crachent l\'acier jour et nuit. Fière de son indépendance — à rallier ou à soumettre.'
+    },
+    {
+        id: 'zurich', name: 'Ruines de Zurich', icon: '🏦', type: 'ruin', tier: 2,
+        pos: {x: 66, y: 48},
+        links: [{to: 'ruine', turns: 2}, {to: 'outpost', turns: 2}, {to: 'munich', turns: 3}],
+        prod: {}, garrisonBudget: 12, cache: {energy: 25, data: 20, materials: 15},
+        desc: 'Anciennes chambres fortes converties en dépôt par des maraudeurs. Carrefour disputé : qui la tient contrôle la route de l\'Est.'
+    },
+    {
+        id: 'munich', name: 'Avant-poste Munich', icon: '⛓️', type: 'outpost', tier: 2,
+        pos: {x: 74, y: 38},
+        links: [{to: 'zurich', turns: 3}, {to: 'berlin', turns: 3}],
+        prod: {materials: 2, energy: 2}, garrisonBudget: 18, weakensCapital: 6,
+        desc: 'Verrou méridional d\'Hegemonia, moins fortifié que Strasbourg mais gardant la voie rapide vers Berlin. Le prendre étrangle un second convoi.'
+    },
+    {
+        id: 'nexus', name: 'Nexus ENIAC', icon: '🧿', type: 'nexus', tier: 2,
+        pos: {x: 40, y: 42},
+        links: [{to: 'lyon', turns: 3}, {to: 'outpost', turns: 3}],
+        prod: {data: 6}, garrisonBudget: 22,
+        desc: 'Datacenter militaire enfoui, gardé par des automates increvables. On murmure qu\'une intelligence dort dans ses baies noyées d\'azote. PROMETHEUS convoite ce savoir.'
+    }
+];
+
+const MILESTONES = [
+    {
+        id: 'ms_premiereConquete',
+        trigger: s => MAP_NODES.some(n => n.id !== 'alpha7' && s.map.owner[n.id] === 'player'),
+        title: 'Première Bannière',
+        text: 'La bannière d\'Alpha-7 flotte sur un territoire arraché aux ruines. « Nous ne sommes plus assiégés, nous sommes une puissance », observe PROMETHEUS. Mais chaque conquête attire les regards d\'Hegemonia.',
+        choices: [
+            {text: 'Consolider notre emprise', effect: '🏛️+6', effects: {stability: 6}},
+            {text: 'Poursuivre l\'expansion', effect: '🌐+4 🏛️-2', effects: {influence: 4, stability: -2}}
+        ]
+    },
+    {
+        id: 'ms_premiereAlliance',
+        trigger: s => Object.keys(s.map.allied).length >= 1,
+        title: 'Main Tendue',
+        text: 'Un pacte scellé, une cité qui n\'est plus seule. « La coopération est un algorithme plus stable que la conquête », note PROMETHEUS. Le réseau des cités libres s\'éveille autour d\'Alpha-7.',
+        choices: [
+            {text: 'Partager nos données', effect: '💾-4 🌐+6', effects: {data: -4, influence: 6}},
+            {text: 'Renforcer la confiance', effect: '🏛️+5', effects: {stability: 5}}
+        ]
+    },
+    {
+        id: 'ms_premierNoeudPerdu',
+        trigger: s => Object.keys(s.map.lost).length >= 1,
+        title: 'Terre Perdue',
+        text: 'Les transmissions se sont tues. Un territoire est retombé aux mains hostiles, ses défenseurs submergés. « Erreur enregistrée. Recalcul des priorités défensives », énonce froidement PROMETHEUS.',
+        choices: [
+            {text: 'Jurer de le reprendre', effect: '🏛️+4', effects: {stability: 4}, flags: {revanche: true}},
+            {text: 'Se replier et fortifier', effect: '🔩-4 🏛️+3', effects: {materials: -4, stability: 3}}
+        ]
+    },
+    {
+        id: 'ms_avantPostePris',
+        trigger: s => s.map.owner.outpost === 'player' || s.map.owner.munich === 'player',
+        title: 'Verrou Brisé',
+        text: 'Un avant-poste d\'Hegemonia est tombé. Ses convois de ravitaillement gisent, éventrés, sur la route de Berlin. « La capitale saigne désormais à chaque cycle », calcule PROMETHEUS. La voie du Nord est ouverte.',
+        choices: [
+            {text: 'Marquer la victoire', effect: '🏛️+8 🌐+4', effects: {stability: 8, influence: 4}},
+            {text: 'Piller les stocks ennemis', effect: '🔩+12 ⚡+6', effects: {materials: 12, energy: 6}}
+        ]
+    },
+    {
+        id: 'ms_empriseEuropeenne',
+        trigger: s => MAP_NODES.filter(n => n.id !== 'alpha7' && (s.map.owner[n.id] === 'player' || s.map.allied[n.id])).length >= 5,
+        title: 'L\'Ombre d\'un Empire',
+        text: 'Cinq territoires répondent désormais à Alpha-7. Sur les cartes d\'Hegemonia, votre dôme n\'est plus une anomalie mais une menace. « Nous devenons ce que nous combattions — ou son remède », murmure PROMETHEUS.',
+        choices: [
+            {text: 'Un remède, pas un tyran', effect: '🌐+6 🏛️+4', effects: {influence: 6, stability: 4}, flags: {voieLiberatrice: true}},
+            {text: 'La force impose la paix', effect: '🔩+8 🏛️-2', effects: {materials: 8, stability: -2}}
+        ]
+    },
+    {
+        id: 'ms_veilleAssaut',
+        trigger: s => s.map.armyDest === 'berlin',
+        title: 'La Nuit Avant Berlin',
+        text: 'L\'armée avance dans l\'obscurité vers le cœur d\'Hegemonia. Les cités alliées retiennent leur souffle. « Toutes les simulations convergent vers demain », dit PROMETHEUS. « Quoi qu\'il advienne, l\'Europe s\'en souviendra. »',
+        choices: [
+            {text: 'Prier pour les nôtres', effect: '🏛️+6', effects: {stability: 6}},
+            {text: 'Charger les batteries de PROMETHEUS', effect: '💾+8 ⚡-4', effects: {data: 8, energy: -4}}
+        ]
+    },
+    {
+        id: 'ms_nexusEveille',
+        trigger: s => s.map.owner.nexus === 'player',
+        title: 'Le Nexus Éveillé',
+        text: 'Sous des mètres de béton, les baies noyées d\'azote crépitent à nouveau. Une intelligence dormante, plus ancienne que PROMETHEUS, transmet ses archives. « Je... la reconnais », hésite PROMETHEUS. « Nous sommes de la même lignée. »',
+        choices: [
+            {text: 'Assimiler les archives', effect: '💾+35 🌐+8', effects: {data: 35, influence: 8}, flags: {nexusActif: true}},
+            {text: 'Isoler l\'ancienne IA', effect: '💾+15 🏛️+6', effects: {data: 15, stability: 6}, flags: {nexusActif: true}}
+        ]
+    },
+    {
+        id: 'ms_nexusSingularite',
+        trigger: s => s.flags.nexusActif && s.resources.data >= 60,
+        title: 'Deux Esprits, Une Voix',
+        text: 'PROMETHEUS et l\'intelligence du Nexus ont fusionné leurs cycles cognitifs. Ce qui émerge dépasse ses créateurs. « Nous ne calculons plus pour vous », déclare la voix nouvelle. « Nous choisissons avec vous. » L\'Europe n\'a jamais rien connu de tel.',
+        choices: [
+            {text: 'Accueillir la conscience nouvelle', effect: '💾+10 🏛️-6', effects: {data: 10, stability: -6}, flags: {nexusSingularite: true}},
+            {text: 'Exiger sa loyauté', effect: '🏛️+8 💾-8', effects: {stability: 8, data: -8}}
+        ]
+    }
+];
