@@ -2,7 +2,13 @@ import * as THREE from 'three';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-const STATUS_COLOR = { player: 0x38bdf8, allied: 0x22c55e, neutral: 0xf59e0b, hostile: 0xef4444 };
+const STATUS_COLOR = { player: 0x0ac8b9, allied: 0x5fb37e, neutral: 0xc8aa6e, hostile: 0xc8473c };
+const K = 2.2;
+const LON0 = 9;
+const LAT0 = 48;
+const COS0 = Math.cos(LAT0 * Math.PI / 180);
+const BBOX = { lon0: -6, lon1: 20, lat0: 41, lat1: 56 };
+const PX = 40;
 
 let renderer = null;
 let labelRenderer = null;
@@ -13,338 +19,562 @@ let container = null;
 let resizeObserver = null;
 let rafId = null;
 let clock = null;
+let heightField = null;
 
-let nodesById = new Map();
-let meshToNodeId = new Map();
-let linksBuilt = false;
-let linkLines = [];
-let armyMesh = null;
+const nodesById = new Map();
+const meshToNodeId = new Map();
+const linksByKey = new Map();
+const flags = [];
+const pulses = [];
+let armyGroup = null;
 let pendingSnapshot = null;
-let currentSnapshot = null;
 let selectCb = null;
+let attract = false;
+let focusAnim = null;
+let hoverId = null;
+let pointerNdc = null;
+let homeTarget = new THREE.Vector3();
+const raycaster = new THREE.Raycaster();
 
 let pointerDownX = 0;
 let pointerDownY = 0;
 let pointerDown = false;
 
-function worldX(x) {
-    return (x / 100 - 0.5) * 22;
+function geoX(lon) {
+    return (lon - LON0) * COS0 * K;
 }
 
-function worldZ(y) {
-    return (y / 100 - 0.5) * 16;
+function geoZ(lat) {
+    return -(lat - LAT0) * K;
 }
 
-function seededRand(seed) {
-    const s = Math.sin(seed * 12.9898) * 43758.5453;
+function smoothstep(a, b, x) {
+    const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+}
+
+function hash(x, y) {
+    const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
     return s - Math.floor(s);
+}
+
+function vnoise(x, y) {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const xf = x - xi, yf = y - yi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+
+function fbm(x, y) {
+    let s = 0, a = 0.5, f = 1;
+    for (let i = 0; i < 4; i++) {
+        s += vnoise(x * f, y * f) * a;
+        f *= 2.03;
+        a *= 0.5;
+    }
+    return s;
+}
+
+const RIDGES = [
+    { pts: [[5.7, 44.1], [6.7, 44.8], [7.0, 45.9], [7.9, 46.1], [8.8, 46.5], [10.0, 46.5], [11.5, 47.0], [13.0, 47.2], [14.8, 47.4]], sigma: 0.32, peak: 0.62 },
+    { pts: [[-1.6, 43.1], [0.5, 42.7], [3.0, 42.5]], sigma: 0.28, peak: 0.36 },
+    { pts: [[8.4, 44.3], [10.5, 44.0], [12.5, 43.0], [14.2, 41.8]], sigma: 0.3, peak: 0.26 },
+    { pts: [[5.9, 46.5], [7.4, 47.4]], sigma: 0.2, peak: 0.16 },
+    { pts: [[6.9, 48.0], [7.2, 48.7]], sigma: 0.18, peak: 0.14 },
+    { pts: [[8.1, 47.7], [8.4, 48.7]], sigma: 0.18, peak: 0.13 },
+    { pts: [[12.2, 50.2], [15.2, 50.7]], sigma: 0.25, peak: 0.15 },
+    { pts: [[13.0, 49.0], [14.0, 48.6]], sigma: 0.25, peak: 0.12 },
+    { pts: [[2.6, 45.0], [3.3, 45.8]], sigma: 0.55, peak: 0.18 }
+];
+
+function segDist(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1)));
+    const cx = ax + dx * t - px, cy = ay + dy * t - py;
+    return Math.sqrt(cx * cx + cy * cy);
+}
+
+function relief(lon, lat) {
+    const c = Math.cos(lat * Math.PI / 180);
+    let h = 0;
+    for (const r of RIDGES) {
+        let d = Infinity;
+        for (let i = 0; i < r.pts.length - 1; i++) {
+            const [ax, ay] = r.pts[i], [bx, by] = r.pts[i + 1];
+            d = Math.min(d, segDist(lon * c, lat, ax * c, ay, bx * c, by));
+        }
+        const ridged = 1 - Math.abs(2 * fbm(lon * 7.5, lat * 7.5) - 1);
+        h += Math.exp(-((d / r.sigma) ** 2)) * r.peak * (0.35 + 0.75 * fbm(lon * 3.4, lat * 3.4) + 0.35 * ridged * ridged);
+    }
+    return h;
+}
+
+function boxBlur(src, w, h, r) {
+    const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+    const n = 2 * r + 1;
+    for (let y = 0; y < h; y++) {
+        let acc = 0;
+        for (let x = -r; x <= r; x++) acc += src[y * w + Math.min(w - 1, Math.max(0, x))];
+        for (let x = 0; x < w; x++) {
+            tmp[y * w + x] = acc / n;
+            acc += src[y * w + Math.min(w - 1, x + r + 1)] - src[y * w + Math.max(0, x - r)];
+        }
+    }
+    for (let x = 0; x < w; x++) {
+        let acc = 0;
+        for (let y = -r; y <= r; y++) acc += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
+        for (let y = 0; y < h; y++) {
+            out[y * w + x] = acc / n;
+            acc += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+        }
+    }
+    return out;
+}
+
+function buildHeightField() {
+    const w = (BBOX.lon1 - BBOX.lon0) * PX, h = (BBOX.lat1 - BBOX.lat0) * PX;
+    const cv = document.createElement('canvas');
+    cv.width = w;
+    cv.height = h;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#fff';
+    const land = typeof EUROPE_LAND !== 'undefined' ? EUROPE_LAND : [];
+    for (const ring of land) {
+        ctx.beginPath();
+        ring.forEach(([lon, lat], i) => {
+            const x = (lon - BBOX.lon0) * PX, y = (BBOX.lat1 - lat) * PX;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.fill();
+    }
+    const raw = ctx.getImageData(0, 0, w, h).data;
+    const mask = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) mask[i] = raw[i * 4] / 255;
+    heightField = { w, h, soft: boxBlur(mask, w, h, 3), coast: boxBlur(boxBlur(mask, w, h, 12), w, h, 12) };
+}
+
+function sampleField(field, lon, lat) {
+    const { w, h } = heightField;
+    const fx = Math.max(0, Math.min(w - 1.001, (lon - BBOX.lon0) * PX));
+    const fy = Math.max(0, Math.min(h - 1.001, (BBOX.lat1 - lat) * PX));
+    const x0 = Math.floor(fx), y0 = Math.floor(fy), tx = fx - x0, ty = fy - y0;
+    const a = field[y0 * w + x0], b = field[y0 * w + x0 + 1], c = field[(y0 + 1) * w + x0], d = field[(y0 + 1) * w + x0 + 1];
+    return (a * (1 - tx) + b * tx) * (1 - ty) + (c * (1 - tx) + d * tx) * ty;
+}
+
+function terrainAt(lon, lat) {
+    const land = sampleField(heightField.soft, lon, lat);
+    const lm = smoothstep(0.3, 0.7, land);
+    const inland = smoothstep(0.5, 0.95, land);
+    const hLand = 0.04 + relief(lon, lat) * inland + fbm(lon * 4.1, lat * 4.1) * 0.05 * inland;
+    return { h: -0.2 * (1 - lm) + hLand * lm, land: lm, coast: sampleField(heightField.coast, lon, lat) };
+}
+
+function heightAt(lon, lat) {
+    return terrainAt(lon, lat).h;
+}
+
+const LAND_STOPS = [
+    [0.0, new THREE.Color(0x353b35)],
+    [0.1, new THREE.Color(0x3d433b)],
+    [0.2, new THREE.Color(0x484b42)],
+    [0.34, new THREE.Color(0x56585a)],
+    [0.5, new THREE.Color(0x777b80)],
+    [0.62, new THREE.Color(0xc9ccd0)]
+];
+const SEA_DEEP = new THREE.Color(0x061224);
+const SEA_SHALLOW = new THREE.Color(0x0e2b42);
+const CONTOUR = new THREE.Color(0x6a5530);
+const VOID = new THREE.Color(0x04080f);
+
+function landColor(h, out) {
+    for (let i = 1; i < LAND_STOPS.length; i++) {
+        if (h <= LAND_STOPS[i][0] || i === LAND_STOPS.length - 1) {
+            const [a, ca] = LAND_STOPS[i - 1], [b, cb] = LAND_STOPS[i];
+            return out.copy(ca).lerp(cb, Math.max(0, Math.min(1, (h - a) / (b - a))));
+        }
+    }
+    return out;
+}
+
+function buildTerrain() {
+    const lonSpan = BBOX.lon1 - BBOX.lon0, latSpan = BBOX.lat1 - BBOX.lat0;
+    const width = lonSpan * COS0 * K, depth = latSpan * K;
+    const segX = 460, segZ = 360;
+    const geo = new THREE.PlaneGeometry(width, depth, segX, segZ);
+    geo.rotateX(-Math.PI / 2);
+    const cx = (geoX(BBOX.lon0) + geoX(BBOX.lon1)) / 2, cz = (geoZ(BBOX.lat0) + geoZ(BBOX.lat1)) / 2;
+    geo.translate(cx, 0, cz);
+    const pos = geo.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    const col = new THREE.Color(), tmp = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+        const lon = pos.getX(i) / (COS0 * K) + LON0;
+        const lat = -pos.getZ(i) / K + LAT0;
+        const t = terrainAt(lon, lat);
+        pos.setY(i, t.h);
+        if (t.land > 0.5) {
+            landColor(Math.max(0, t.h), col);
+            col.multiplyScalar(0.88 + fbm(lon * 6, lat * 6) * 0.24);
+        } else {
+            col.copy(SEA_DEEP).lerp(SEA_SHALLOW, Math.min(1, t.coast * 1.8));
+            col.lerp(CONTOUR, smoothstep(0.32, 0.5, t.land + t.coast * 0.3) * 0.35);
+        }
+        const ex = Math.min(lon - BBOX.lon0, BBOX.lon1 - lon) / 3.5, ez = Math.min(lat - BBOX.lat0, BBOX.lat1 - lat) / 2.5;
+        col.lerp(VOID, 1 - smoothstep(0, 1, Math.min(ex, ez)));
+        colors[i * 3] = col.r;
+        colors[i * 3 + 1] = col.g;
+        colors[i * 3 + 2] = col.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.93, metalness: 0 }));
+    scene.add(mesh);
+
+    const coastMat = new THREE.LineBasicMaterial({ color: 0xc8aa6e, transparent: true, opacity: 0.55 });
+    for (const ring of (typeof EUROPE_LAND !== 'undefined' ? EUROPE_LAND : [])) {
+        const pts = ring.map(([lon, lat]) => new THREE.Vector3(geoX(lon), Math.max(-0.08, heightAt(lon, lat)) + 0.02, geoZ(lat)));
+        scene.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), coastMat));
+    }
+    const riverMat = new THREE.LineBasicMaterial({ color: 0x3f8fb0, transparent: true, opacity: 0.75 });
+    for (const r of (typeof EUROPE_RIVERS !== 'undefined' ? EUROPE_RIVERS : [])) {
+        const pts = r.pts.map(([lon, lat]) => new THREE.Vector3(geoX(lon), heightAt(lon, lat) + 0.025, geoZ(lat)));
+        scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), riverMat));
+    }
+    const grat = [];
+    for (let lon = -4; lon <= 18; lon += 2) grat.push(new THREE.Vector3(geoX(lon), -0.19, geoZ(BBOX.lat0 + 1)), new THREE.Vector3(geoX(lon), -0.19, geoZ(BBOX.lat1 - 1)));
+    for (let lat = 42; lat <= 55; lat += 2) grat.push(new THREE.Vector3(geoX(BBOX.lon0 + 1), -0.19, geoZ(lat)), new THREE.Vector3(geoX(BBOX.lon1 - 1), -0.19, geoZ(lat)));
+    scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(grat), new THREE.LineBasicMaterial({ color: 0xc8aa6e, transparent: true, opacity: 0.07 })));
 }
 
 function buildScene() {
     scene = new THREE.Scene();
-    scene.background = null;
-    scene.fog = new THREE.FogExp2(0x0a0e1a, 0.015);
-
-    const hemi = new THREE.HemisphereLight(0x8fb8ff, 0x0a0e1a, 0.85);
-    scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 1.1);
-    dir.position.set(5, 14, 4);
-    scene.add(dir);
-
-    const groundGeo = new THREE.PlaneGeometry(30, 22);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x0d1322, roughness: 1 });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    scene.add(ground);
-
-    const grid = new THREE.GridHelper(30, 30, 0x16233d, 0x101a2e);
-    grid.position.y = 0.01;
-    scene.add(grid);
-
-    buildRuinsDecor();
-
-    camera = new THREE.PerspectiveCamera(48, 1, 0.1, 200);
-    camera.position.set(0, 15, 11);
-    camera.lookAt(0, 0, 0);
+    scene.fog = new THREE.Fog(0x04080f, 30, 70);
+    scene.add(new THREE.HemisphereLight(0x9ab8d8, 0x101820, 0.8));
+    const sun = new THREE.DirectionalLight(0xfff1dc, 2.1);
+    sun.position.set(-9, 7, -4);
+    scene.add(sun);
+    const rim = new THREE.DirectionalLight(0x5fa8c8, 0.35);
+    rim.position.set(6, 4, 8);
+    scene.add(rim);
+    buildHeightField();
+    buildTerrain();
+    camera = new THREE.PerspectiveCamera(38, 1, 0.1, 200);
 }
 
-function buildRuinsDecor() {
-    const mat = new THREE.MeshStandardMaterial({ color: 0x1a2436, roughness: 1 });
-    let seed = 1;
-    for (let i = 0; i < 12; i++) {
-        const rx = seededRand(seed++) * 26 - 13;
-        const rz = seededRand(seed++) * 20 - 10;
-        const w = 0.4 + seededRand(seed++) * 1.1;
-        const h = 0.3 + seededRand(seed++) * 0.9;
-        const d = 0.4 + seededRand(seed++) * 1.1;
-        const box = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-        box.position.set(rx, h / 2, rz);
-        box.rotation.y = seededRand(seed++) * Math.PI;
-        scene.add(box);
+const BRASS = new THREE.MeshStandardMaterial({ color: 0x8a6a34, roughness: 0.38, metalness: 0.85 });
+const BRASS_DARK = new THREE.MeshStandardMaterial({ color: 0x3e2f16, roughness: 0.55, metalness: 0.7 });
+const STONE = new THREE.MeshStandardMaterial({ color: 0x4a463e, roughness: 0.95 });
+const IRON = new THREE.MeshStandardMaterial({ color: 0x23262c, roughness: 0.55, metalness: 0.6 });
+
+function glass(color) {
+    return new THREE.MeshStandardMaterial({ color: 0xbfeaf0, roughness: 0.08, metalness: 0.2, transparent: true, opacity: 0.22, emissive: new THREE.Color(color), emissiveIntensity: 0.12, depthWrite: false });
+}
+
+function glow(color, intensity = 1.4) {
+    return new THREE.MeshStandardMaterial({ color: 0x111111, emissive: new THREE.Color(color), emissiveIntensity: intensity });
+}
+
+function add(group, geo, mat, x = 0, y = 0, z = 0) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    group.add(m);
+    return m;
+}
+
+function buildHome(g) {
+    add(g, new THREE.CylinderGeometry(0.62, 0.66, 0.06, 32), BRASS, 0, 0.03);
+    add(g, new THREE.CylinderGeometry(0.06, 0.1, 0.9, 10), BRASS, 0, 0.45);
+    add(g, new THREE.OctahedronGeometry(0.11), glow(0x0ac8b9, 2.2), 0, 0.98);
+    for (let i = 0; i < 5; i++) {
+        const a = i / 5 * Math.PI * 2;
+        add(g, new THREE.BoxGeometry(0.12, 0.18 + (i % 2) * 0.12, 0.12), IRON, Math.cos(a) * 0.3, 0.12, Math.sin(a) * 0.3);
     }
+    return add(g, new THREE.SphereGeometry(0.6, 32, 14, 0, Math.PI * 2, 0, Math.PI / 2), glass(0x0ac8b9));
 }
 
-function domeMaterial() {
-    return new THREE.MeshStandardMaterial({
-        color: 0x1e293b,
-        roughness: 0.6,
-        metalness: 0.25,
-        emissive: new THREE.Color(0x38bdf8),
-        emissiveIntensity: 0.5
-    });
+function buildCity(g) {
+    add(g, new THREE.CylinderGeometry(0.46, 0.5, 0.05, 28), BRASS, 0, 0.025);
+    [[0, 0.28, 0], [-0.17, 0.18, 0.1], [0.16, 0.22, -0.08], [0.05, 0.14, 0.2]].forEach(([x, h, z]) => add(g, new THREE.BoxGeometry(0.11, h, 0.11), IRON, x, h / 2, z));
+    return add(g, new THREE.SphereGeometry(0.44, 28, 12, 0, Math.PI * 2, 0, Math.PI / 2), glass(0xc8aa6e));
 }
 
-function buildHome(group, mat) {
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.6, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat);
-    dome.position.y = 0.18;
-    group.add(dome);
-
-    const towerMat = new THREE.MeshStandardMaterial({
-        color: 0x1e293b,
-        roughness: 0.5,
-        metalness: 0.3,
-        emissive: new THREE.Color(0x00d4ff),
-        emissiveIntensity: 0.9
-    });
-    const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 0.7, 10), towerMat);
-    tower.position.y = 0.7;
-    group.add(tower);
-
-    return dome;
-}
-
-function buildCity(group, mat) {
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.55, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat);
-    dome.position.y = 0.18;
-    group.add(dome);
-
-    [-0.5, 0.5].forEach((dx) => {
-        const box = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.4, 0.28), mat);
-        box.position.set(dx, 0.38, 0.1);
-        group.add(box);
-    });
-
-    return dome;
-}
-
-function buildRuin(group, mat) {
-    const positions = [
-        { x: -0.3, z: 0.1, w: 0.4, h: 0.25, d: 0.35 },
-        { x: 0.25, z: -0.2, w: 0.3, h: 0.35, d: 0.3 },
-        { x: 0.1, z: 0.3, w: 0.35, h: 0.18, d: 0.3 }
-    ];
+function buildRuin(g) {
     let last = null;
-    positions.forEach((p) => {
-        const box = new THREE.Mesh(new THREE.BoxGeometry(p.w, p.h, p.d), mat);
-        box.position.set(p.x, 0.18 + p.h / 2, p.z);
-        box.rotation.z = 0.15;
-        group.add(box);
-        last = box;
+    [[-0.22, 0.1, 0.32, 0.25], [0.18, -0.14, 0.42, -0.2], [0.04, 0.24, 0.2, 0.35], [-0.05, -0.25, 0.26, 0.1]].forEach(([x, z, h, r]) => {
+        last = add(g, new THREE.BoxGeometry(0.12, h, 0.12), STONE, x, h / 2, z);
+        last.rotation.z = r;
     });
-    return last;
+    add(g, new THREE.TorusGeometry(0.32, 0.03, 6, 20, Math.PI * 1.2), STONE, 0, 0.05, 0).rotation.x = Math.PI / 2;
+    add(g, new THREE.OctahedronGeometry(0.07), glow(0xd9874e, 1.6), 0, 0.22, 0);
+    return add(g, new THREE.CylinderGeometry(0.42, 0.46, 0.04, 7), STONE, 0, 0.02);
 }
 
-function buildOutpost(group, mat) {
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.7), mat);
-    box.position.y = 0.18 + 0.25;
-    group.add(box);
-
-    const turret = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.35, 10), mat);
-    turret.position.y = 0.18 + 0.5 + 0.17;
-    group.add(turret);
-
-    return box;
+function buildOutpost(g) {
+    add(g, new THREE.CylinderGeometry(0.42, 0.5, 0.06, 4), IRON, 0, 0.03).rotation.y = Math.PI / 4;
+    const body = add(g, new THREE.CylinderGeometry(0.26, 0.36, 0.3, 4), IRON, 0, 0.21);
+    body.rotation.y = Math.PI / 4;
+    add(g, new THREE.BoxGeometry(0.4, 0.03, 0.03), glow(0xc8473c, 1.8), 0, 0.26, 0.2);
+    add(g, new THREE.CylinderGeometry(0.08, 0.1, 0.2, 8), IRON, 0, 0.46);
+    add(g, new THREE.BoxGeometry(0.26, 0.04, 0.04), IRON, 0.1, 0.5, 0);
+    return body;
 }
 
-function buildCapital(group, mat) {
-    const dome = new THREE.Mesh(new THREE.SphereGeometry(0.8, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat);
-    dome.position.y = 0.18;
-    group.add(dome);
-
-    const pylonMat = new THREE.MeshStandardMaterial({
-        color: 0x1e293b,
-        roughness: 0.5,
-        metalness: 0.3,
-        emissive: new THREE.Color(0x00d4ff),
-        emissiveIntensity: 0.7
-    });
+function buildCapital(g) {
+    add(g, new THREE.CylinderGeometry(0.7, 0.78, 0.1, 8), IRON, 0, 0.05);
+    add(g, new THREE.CylinderGeometry(0.5, 0.6, 0.22, 8), IRON, 0, 0.21);
+    const keep = add(g, new THREE.CylinderGeometry(0.28, 0.4, 0.4, 8), IRON, 0, 0.52);
+    add(g, new THREE.ConeGeometry(0.12, 0.7, 8), IRON, 0, 1.07);
+    add(g, new THREE.OctahedronGeometry(0.08), glow(0xc8473c, 2.4), 0, 1.5);
     for (let i = 0; i < 4; i++) {
-        const angle = (i / 4) * Math.PI * 2;
-        const px = Math.cos(angle) * 0.95;
-        const pz = Math.sin(angle) * 0.95;
-        const pylon = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.9, 8), pylonMat);
-        pylon.position.set(px, 0.18 + 0.45, pz);
-        group.add(pylon);
+        const a = i / 4 * Math.PI * 2 + Math.PI / 4;
+        add(g, new THREE.CylinderGeometry(0.035, 0.05, 0.7, 6), IRON, Math.cos(a) * 0.62, 0.45, Math.sin(a) * 0.62);
+        add(g, new THREE.SphereGeometry(0.05, 8, 6), glow(0xc8473c, 2), Math.cos(a) * 0.62, 0.82, Math.sin(a) * 0.62);
     }
-
-    return dome;
+    return keep;
 }
 
-const DOME_BUILDERS = {
-    home: buildHome,
-    city: buildCity,
-    ruin: buildRuin,
-    outpost: buildOutpost,
-    capital: buildCapital
-};
-
-function createLabelEl(node) {
-    const div = document.createElement('div');
-    div.className = 'm3d-label';
-    let html = `<div class="m3d-name">${node.icon || ''} ${node.name || ''}</div>`;
-    if (node.threat != null) {
-        html += `<div class="m3d-threat">⚠️ ${node.threat} tour(s)</div>`;
-    }
-    div.innerHTML = html;
-    return div;
+function buildNexus(g) {
+    add(g, new THREE.CylinderGeometry(0.44, 0.5, 0.1, 6), IRON, 0, 0.05);
+    add(g, new THREE.CylinderGeometry(0.3, 0.3, 0.04, 6), glow(0xa98bd9, 0.9), 0, 0.12);
+    const crystal = add(g, new THREE.OctahedronGeometry(0.13), new THREE.MeshStandardMaterial({ color: 0x2a1f3d, emissive: new THREE.Color(0xa98bd9), emissiveIntensity: 1.3, roughness: 0.2, metalness: 0.3 }), 0, 0.55);
+    crystal.scale.y = 1.5;
+    crystal.userData.spin = true;
+    return crystal;
 }
 
-const nodeBaseGeo = new THREE.CylinderGeometry(0.85, 1, 0.18, 24);
-const nodeBaseMat = new THREE.MeshStandardMaterial({ color: 0x16233d, roughness: 0.6, metalness: 0.25 });
-const selRingGeo = new THREE.TorusGeometry(1.15, 0.04, 8, 32);
-const selRingMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.2, emissive: new THREE.Color(0xffffff), emissiveIntensity: 1 });
-const threatRingGeo = new THREE.TorusGeometry(1.3, 0.05, 8, 32);
-const threatRingMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.2, emissive: new THREE.Color(0xef4444), emissiveIntensity: 0.5 });
+const BUILDERS = { home: buildHome, city: buildCity, ruin: buildRuin, outpost: buildOutpost, capital: buildCapital, nexus: buildNexus };
 
-function createNodeEntry(node) {
+function makeFlag(color) {
+    const g = new THREE.Group();
+    add(g, new THREE.CylinderGeometry(0.014, 0.014, 0.9, 6), BRASS, 0, 0.45);
+    add(g, new THREE.SphereGeometry(0.03, 8, 6), BRASS, 0, 0.92);
+    const geo = new THREE.PlaneGeometry(0.34, 0.2, 12, 1);
+    geo.translate(0.17, 0, 0);
+    const mat = new THREE.MeshStandardMaterial({ color, emissive: new THREE.Color(color), emissiveIntensity: 0.35, side: THREE.DoubleSide, roughness: 0.8 });
+    const cloth = add(g, geo, mat, 0.014, 0.78);
+    flags.push({ cloth, base: geo.attributes.position.array.slice(), phase: Math.random() * 6 });
+    return { group: g, mat };
+}
+
+function waveFlags(t) {
+    for (const f of flags) {
+        const arr = f.cloth.geometry.attributes.position.array;
+        for (let i = 0; i < arr.length; i += 3) {
+            const x = f.base[i];
+            arr[i + 2] = Math.sin(x * 14 - t * 4 + f.phase) * 0.035 * (x / 0.34);
+            arr[i + 1] = f.base[i + 1] - x * 0.06;
+        }
+        f.cloth.geometry.attributes.position.needsUpdate = true;
+    }
+}
+
+function labelHtml(n) {
+    return `<div class="m3d-name"><i class="ph-duotone ph-${n.glyph || 'circle'}"></i>${n.name}</div>` + (n.threat != null ? `<div class="m3d-threat"><i class="ph-fill ph-warning-diamond"></i>${n.threat} tour${n.threat > 1 ? 's' : ''}</div>` : '');
+}
+
+const haloGeo = new THREE.RingGeometry(0.68, 0.72, 48);
+const discGeo = new THREE.CircleGeometry(0.66, 48);
+const selGeo = new THREE.RingGeometry(0.84, 0.9, 6);
+const threatGeo = new THREE.RingGeometry(0.96, 1.04, 48);
+
+function createNode(n) {
     const group = new THREE.Group();
-    group.position.set(worldX(node.x), 0, worldZ(node.y));
+    const lon = n.lon, lat = n.lat;
+    const y = Math.max(0.02, heightAt(lon, lat));
+    group.position.set(geoX(lon), y, geoZ(lat));
     scene.add(group);
-
-    const base = new THREE.Mesh(nodeBaseGeo, nodeBaseMat);
-    base.position.y = 0.09;
-    group.add(base);
-
-    const mat = domeMaterial();
-    const builder = DOME_BUILDERS[node.type] || buildCity;
-    const domeMesh = builder(group, mat);
-
-    const selRing = new THREE.Mesh(selRingGeo, selRingMat);
-    selRing.rotation.x = Math.PI / 2;
-    selRing.position.y = 0.05;
-    selRing.visible = false;
-    group.add(selRing);
-
-    const threatRing = new THREE.Mesh(threatRingGeo, threatRingMat);
-    threatRing.rotation.x = Math.PI / 2;
-    threatRing.position.y = 0.06;
-    threatRing.visible = false;
-    group.add(threatRing);
-
-    const labelEl = createLabelEl(node);
-    const labelObj = new CSS2DObject(labelEl);
-    labelObj.position.set(0, 1.6, 0);
-    group.add(labelObj);
-
-    meshToNodeId.set(base, node.id);
-    meshToNodeId.set(domeMesh, node.id);
-
-    const entry = {
-        group,
-        base,
-        domeMesh,
-        mat,
-        selRing,
-        threatRing,
-        labelEl,
-        labelObj,
-        status: null,
-        selected: false,
-        threat: null
-    };
-    nodesById.set(node.id, entry);
+    add(group, new THREE.CylinderGeometry(0.62, 0.7, 0.5, 6), BRASS_DARK, 0, -0.22);
+    const haloMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false });
+    const halo = add(group, haloGeo, haloMat, 0, 0.035);
+    halo.rotation.x = -Math.PI / 2;
+    const discMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false });
+    const disc = add(group, discGeo, discMat, 0, 0.032);
+    disc.rotation.x = -Math.PI / 2;
+    const model = new THREE.Group();
+    model.position.y = 0.04;
+    group.add(model);
+    const pick = (BUILDERS[n.type] || buildCity)(model);
+    const flag = makeFlag(0xffffff);
+    flag.group.position.set(0.5, 0.03, -0.32);
+    group.add(flag.group);
+    const sel = add(group, selGeo, new THREE.MeshBasicMaterial({ color: 0xf0e6d2, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthWrite: false }), 0, 0.04);
+    sel.rotation.x = -Math.PI / 2;
+    sel.visible = false;
+    const threat = add(group, threatGeo, new THREE.MeshBasicMaterial({ color: 0xff5a48, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }), 0, 0.045);
+    threat.rotation.x = -Math.PI / 2;
+    threat.visible = false;
+    const labelEl = document.createElement('div');
+    labelEl.className = 'm3d-label';
+    labelEl.dataset.node = n.id;
+    const label = new CSS2DObject(labelEl);
+    label.position.set(0, n.type === 'capital' ? 1.85 : 1.25, 0);
+    group.add(label);
+    const hit = add(group, new THREE.CylinderGeometry(0.75, 0.75, 1.2, 12), new THREE.MeshBasicMaterial({ visible: false }), 0, 0.5);
+    meshToNodeId.set(hit, n.id);
+    const entry = { id: n.id, group, model, pick, haloMat, discMat, flagMat: flag.mat, sel, threat, labelEl, status: null, lon, lat, y };
+    nodesById.set(n.id, entry);
     return entry;
 }
 
-function updateNodeEntry(entry, node) {
-    entry.group.position.set(worldX(node.x), 0, worldZ(node.y));
-
-    const color = STATUS_COLOR[node.status] !== undefined ? STATUS_COLOR[node.status] : 0x38bdf8;
-    if (entry.status !== node.status) {
-        entry.mat.emissive.set(color);
-        entry.mat.emissiveIntensity = 0.5;
-        entry.status = node.status;
+function updateNode(e, n) {
+    if (e.status !== n.status) {
+        const c = STATUS_COLOR[n.status] ?? 0xc8aa6e;
+        e.haloMat.color.set(c);
+        e.discMat.color.set(c);
+        e.flagMat.color.set(c);
+        e.flagMat.emissive.set(c);
+        e.status = n.status;
+        e.labelEl.style.setProperty('--st', `var(--st-${n.status})`);
     }
+    e.sel.visible = !!n.selected;
+    e.threat.visible = n.threat != null;
+    e.labelEl.classList.toggle('sel', !!n.selected);
+    const html = labelHtml(n);
+    if (e.labelEl._html !== html) {
+        e.labelEl.innerHTML = html;
+        e.labelEl._html = html;
+    }
+}
 
-    entry.selRing.visible = !!node.selected;
-    entry.selected = !!node.selected;
+let stripeTex = null;
 
-    entry.threatRing.visible = node.threat != null;
-    entry.threat = node.threat;
+function getStripeTex() {
+    if (stripeTex) return stripeTex;
+    const cv = document.createElement('canvas');
+    cv.width = 64;
+    cv.height = 4;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(0, 0, 64, 4);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 30, 4);
+    stripeTex = new THREE.CanvasTexture(cv);
+    stripeTex.wrapS = THREE.RepeatWrapping;
+    return stripeTex;
+}
 
-    entry.labelEl.innerHTML = `<div class="m3d-name">${node.icon || ''} ${node.name || ''}</div>` +
-        (node.threat != null ? `<div class="m3d-threat">⚠️ ${node.threat} tour(s)</div>` : '');
+function routeCurve(a, b) {
+    const pts = [];
+    const N = 28;
+    for (let i = 0; i <= N; i++) {
+        const t = i / N;
+        const lon = a.lon + (b.lon - a.lon) * t, lat = a.lat + (b.lat - a.lat) * t;
+        const yA = a.y + 0.06, yB = b.y + 0.06;
+        const ground = Math.max(0, heightAt(lon, lat)) + 0.06;
+        const y = Math.max(ground, yA + (yB - yA) * t) + Math.sin(t * Math.PI) * 0.1;
+        pts.push(new THREE.Vector3(geoX(lon), y, geoZ(lat)));
+    }
+    return new THREE.CatmullRomCurve3(pts);
 }
 
 function buildLinks(links) {
-    linkLines.forEach((l) => {
-        scene.remove(l);
-        l.geometry.dispose();
-        l.material.dispose();
-    });
-    linkLines = [];
-    (links || []).forEach((link) => {
-        const geo = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(worldX(link.ax), 0.06, worldZ(link.ay)),
-            new THREE.Vector3(worldX(link.bx), 0.06, worldZ(link.by))
-        ]);
-        const mat = new THREE.LineBasicMaterial({ color: 0x27405f, transparent: true, opacity: 0.7 });
-        const line = new THREE.Line(geo, mat);
-        scene.add(line);
-        linkLines.push(line);
-    });
-    linksBuilt = true;
+    for (const l of links) {
+        const key = l.a + '|' + l.b;
+        if (linksByKey.has(key)) continue;
+        const a = nodesById.get(l.a), b = nodesById.get(l.b);
+        if (!a || !b) continue;
+        const curve = routeCurve(a, b);
+        const len = curve.getLength();
+        const idle = new THREE.MeshBasicMaterial({ color: 0x8a6a34, transparent: true, opacity: 0.55 });
+        const tex = getStripeTex().clone();
+        tex.needsUpdate = true;
+        tex.repeat.set(Math.max(1, Math.round(len * 3)), 1);
+        const live = new THREE.MeshBasicMaterial({ color: 0x3ff5e6, map: tex, transparent: true, opacity: 0.95, depthWrite: false });
+        const mesh = new THREE.Mesh(new THREE.TubeGeometry(curve, 48, 0.026, 6, false), idle);
+        scene.add(mesh);
+        const tagEl = document.createElement('div');
+        tagEl.className = 'm3d-route';
+        tagEl.innerHTML = `<i class="ph-fill ph-hourglass-medium"></i>${l.turns} tour${l.turns > 1 ? 's' : ''}`;
+        const tag = new CSS2DObject(tagEl);
+        tag.position.copy(curve.getPoint(0.5)).add(new THREE.Vector3(0, 0.12, 0));
+        tag.visible = false;
+        scene.add(tag);
+        linksByKey.set(key, { a: l.a, b: l.b, curve, mesh, idle, live, tex, tag, dir: 1 });
+    }
 }
 
-function ensureArmyMesh() {
-    if (armyMesh) return armyMesh;
-    const mat = new THREE.MeshStandardMaterial({
-        color: 0x1e293b,
-        roughness: 0.4,
-        metalness: 0.3,
-        emissive: new THREE.Color(0x00d4ff),
-        emissiveIntensity: 1.2
-    });
-    const mesh = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.7, 8), mat);
-    mesh.visible = false;
-    scene.add(mesh);
-    armyMesh = mesh;
-    return mesh;
+function updateLinks(links, army, selected) {
+    for (const l of links) {
+        const e = linksByKey.get(l.a + '|' + l.b);
+        if (!e) continue;
+        const marching = army && army.to && ((army.from === l.a && army.to === l.b) || (army.from === l.b && army.to === l.a));
+        const active = l.active || marching;
+        e.mesh.material = active ? e.live : e.idle;
+        e.tag.visible = !!l.active && (l.a === selected || l.b === selected) && !(army && army.at === selected);
+        const origin = l.active ? (army && army.at) : (army && army.from);
+        e.dir = origin === l.b ? -1 : 1;
+    }
+}
+
+function ensureArmy() {
+    if (armyGroup) return armyGroup;
+    armyGroup = new THREE.Group();
+    const f = makeFlag(0x0ac8b9);
+    f.group.scale.setScalar(1.35);
+    armyGroup.add(f.group);
+    const gem = add(armyGroup, new THREE.OctahedronGeometry(0.09), glow(0x0ac8b9, 2.4), 0, 1.36);
+    gem.userData.spin = true;
+    const ring = add(armyGroup, new THREE.RingGeometry(0.12, 0.17, 24), new THREE.MeshBasicMaterial({ color: 0x0ac8b9, transparent: true, opacity: 0.8, side: THREE.DoubleSide }), 0, 0.02);
+    ring.rotation.x = -Math.PI / 2;
+    scene.add(armyGroup);
+    return armyGroup;
 }
 
 function updateArmy(army) {
-    const mesh = ensureArmyMesh();
+    const g = ensureArmy();
     if (!army) {
-        mesh.visible = false;
+        g.visible = false;
         return;
     }
-    mesh.visible = true;
-    if (army.progress != null) {
-        const fromX = worldX(army.fromX);
-        const fromZ = worldZ(army.fromY);
-        const toX = worldX(army.toX);
-        const toZ = worldZ(army.toY);
-        const t = Math.max(0, Math.min(1, army.progress));
-        mesh.position.x = fromX + (toX - fromX) * t;
-        mesh.position.z = fromZ + (toZ - fromZ) * t;
-    } else {
-        mesh.position.x = worldX(army.x) + 0.9;
-        mesh.position.z = worldZ(army.y);
+    g.visible = true;
+    if (army.at) {
+        const n = nodesById.get(army.at);
+        if (n) g.position.set(n.group.position.x - 0.55, n.y + 0.03, n.group.position.z + 0.36);
+        return;
     }
-    mesh.userData.baseY = 0.55;
+    const key1 = army.from + '|' + army.to, key2 = army.to + '|' + army.from;
+    const e = linksByKey.get(key1) || linksByKey.get(key2);
+    if (!e) return;
+    const t = linksByKey.has(key1) ? army.progress : 1 - army.progress;
+    const p = e.curve.getPoint(Math.max(0.12, Math.min(0.88, t)));
+    g.position.set(p.x, p.y - 0.05, p.z);
 }
 
-function applySnapshot(snapshot) {
-    if (!scene) return;
-    currentSnapshot = snapshot;
-    const nodes = snapshot.nodes || [];
-    nodes.forEach((node) => {
-        let entry = nodesById.get(node.id);
-        if (!entry) entry = createNodeEntry(node);
-        updateNodeEntry(entry, node);
-    });
-    if (!linksBuilt) buildLinks(snapshot.links);
-    updateArmy(snapshot.army);
+function applySnapshot(s) {
+    for (const n of s.nodes || []) updateNode(nodesById.get(n.id) || createNode(n), n);
+    buildLinks(s.links || []);
+    updateLinks(s.links || [], s.army, (s.nodes || []).filter(n => n.selected).map(n => n.id)[0]);
+    updateArmy(s.army);
+    if (!homeTarget.lengthSq()) {
+        const xs = [...nodesById.values()];
+        const zs = xs.map(e => e.group.position.z);
+        homeTarget.set(xs.reduce((a, e) => a + e.group.position.x, 0) / xs.length, 0, (Math.min(...zs) + Math.max(...zs)) / 2 + 1.4);
+        resetCamera();
+    }
+}
+
+function resetCamera() {
+    if (!camera) return;
+    camera.position.copy(homeTarget).add(new THREE.Vector3(0, 27, 16.5));
+    camera.lookAt(homeTarget);
+    if (controls) {
+        controls.target.copy(homeTarget);
+        controls.update();
+    }
+}
+
+function pickAt(ev) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects([...meshToNodeId.keys()], false);
+    return hits.length ? meshToNodeId.get(hits[0].object) : null;
 }
 
 function onPointerDown(ev) {
@@ -356,119 +586,159 @@ function onPointerDown(ev) {
 function onPointerUp(ev) {
     if (!pointerDown) return;
     pointerDown = false;
-    const dx = ev.clientX - pointerDownX;
-    const dy = ev.clientY - pointerDownY;
-    if (Math.hypot(dx, dy) > 5) return;
-    if (!selectCb) return;
+    if (attract || Math.hypot(ev.clientX - pointerDownX, ev.clientY - pointerDownY) > 5 || !selectCb) return;
+    selectCb(pickAt(ev));
+}
 
-    const rect = renderer.domElement.getBoundingClientRect();
-    const pointer = new THREE.Vector2(
-        ((ev.clientX - rect.left) / rect.width) * 2 - 1,
-        -((ev.clientY - rect.top) / rect.height) * 2 + 1
-    );
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(pointer, camera);
-    const meshes = [...meshToNodeId.keys()];
-    const hits = raycaster.intersectObjects(meshes, false);
-    if (hits.length > 0) {
-        const nodeId = meshToNodeId.get(hits[0].object);
-        if (nodeId) selectCb(nodeId);
+function onPointerMove(ev) {
+    if (attract) return;
+    pointerNdc = ev;
+}
+
+function updateHover() {
+    if (!pointerNdc || pointerDown) return;
+    const id = pickAt(pointerNdc);
+    pointerNdc = null;
+    if (id === hoverId) return;
+    if (hoverId && nodesById.get(hoverId)) nodesById.get(hoverId).labelEl.classList.remove('hover');
+    hoverId = id;
+    if (id) nodesById.get(id).labelEl.classList.add('hover');
+    renderer.domElement.style.cursor = id ? 'pointer' : '';
+}
+
+function spawnPulse(id, color) {
+    const e = nodesById.get(id);
+    if (!e) return;
+    [0, 0.25].forEach(delay => {
+        const m = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.68, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+        m.rotation.x = -Math.PI / 2;
+        m.position.set(e.group.position.x, e.y + 0.06, e.group.position.z);
+        scene.add(m);
+        pulses.push({ m, t: -delay, dur: 1.3 });
+    });
+    e.model.scale.setScalar(1.25);
+}
+
+function updatePulses(dt) {
+    for (let i = pulses.length - 1; i >= 0; i--) {
+        const p = pulses[i];
+        p.t += dt;
+        if (p.t < 0) continue;
+        const k = p.t / p.dur;
+        p.m.scale.setScalar(1 + k * 2.6);
+        p.m.material.opacity = Math.max(0, 1 - k) * 0.9;
+        if (k >= 1) {
+            scene.remove(p.m);
+            p.m.geometry.dispose();
+            p.m.material.dispose();
+            pulses.splice(i, 1);
+        }
     }
 }
 
 function animate() {
     rafId = requestAnimationFrame(animate);
-    const delta = clock.getDelta();
-    const time = clock.getElapsedTime();
-
-    if (controls) {
-        controls.target.x = Math.max(-8, Math.min(8, controls.target.x));
-        controls.target.z = Math.max(-6, Math.min(6, controls.target.z));
-        controls.update();
-    }
-
-    nodesById.forEach((entry) => {
-        if (entry.selRing.visible) entry.selRing.rotation.z += delta * 0.6;
-        if (entry.threatRing.visible) {
-            entry.threatRing.rotation.z -= delta * 0.4;
-            entry.threatRing.material.emissiveIntensity = 1 + Math.sin(time * 4) * 0.5;
+    const dt = Math.min(0.05, clock.getDelta());
+    const t = clock.getElapsedTime();
+    if (attract) {
+        const a = Math.sin(t * 0.06) * 0.5;
+        camera.position.set(homeTarget.x + Math.sin(a) * 22, 17, homeTarget.z + Math.cos(a) * 22);
+        camera.lookAt(homeTarget.x, 0, homeTarget.z - 1);
+    } else if (controls) {
+        if (focusAnim) {
+            focusAnim.k = Math.min(1, focusAnim.k + dt / 0.7);
+            const e = 1 - Math.pow(1 - focusAnim.k, 3);
+            const next = focusAnim.from.clone().lerp(focusAnim.to, e);
+            camera.position.add(next.clone().sub(controls.target));
+            controls.target.copy(next);
+            if (focusAnim.k >= 1) focusAnim = null;
         }
-    });
-
-    if (armyMesh && armyMesh.visible) {
-        const baseY = armyMesh.userData.baseY || 0.55;
-        armyMesh.position.y = baseY + Math.sin(time * 2) * 0.06;
-        armyMesh.rotation.y += delta * 0.8;
+        controls.target.x = Math.max(homeTarget.x - 9, Math.min(homeTarget.x + 9, controls.target.x));
+        controls.target.z = Math.max(homeTarget.z - 11, Math.min(homeTarget.z + 9, controls.target.z));
+        controls.target.y = 0;
+        controls.update();
+        updateHover();
     }
-
-    if (renderer && scene && camera) renderer.render(scene, camera);
-    if (labelRenderer && scene && camera) labelRenderer.render(scene, camera);
+    nodesById.forEach(e => {
+        if (e.sel.visible) e.sel.rotation.z += dt * 0.5;
+        if (e.threat.visible) e.threat.material.opacity = 0.55 + Math.sin(t * 4) * 0.35;
+        const s = e.model.scale.x;
+        if (s > 1) e.model.scale.setScalar(Math.max(1, s - dt * 0.6));
+        e.model.traverse(o => {
+            if (o.userData.spin) o.rotation.y += dt * 0.9;
+        });
+    });
+    linksByKey.forEach(e => {
+        if (e.mesh.material === e.live) e.tex.offset.x -= dt * 0.9 * e.dir;
+    });
+    if (armyGroup && armyGroup.visible) {
+        armyGroup.children.forEach(o => {
+            if (o.userData.spin) {
+                o.rotation.y += dt * 1.6;
+                o.position.y = 1.36 + Math.sin(t * 2.4) * 0.04;
+            }
+        });
+    }
+    waveFlags(t);
+    updatePulses(dt);
+    renderer.render(scene, camera);
+    labelRenderer.render(scene, camera);
 }
 
 function mount(el) {
     container = el;
     if (!scene) buildScene();
     if (!clock) clock = new THREE.Clock();
-
     if (!renderer) {
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.15;
         renderer.domElement.style.position = 'absolute';
         renderer.domElement.style.inset = '0';
-        container.appendChild(renderer.domElement);
         renderer.domElement.addEventListener('pointerdown', onPointerDown);
         renderer.domElement.addEventListener('pointerup', onPointerUp);
-    } else if (renderer.domElement.parentElement !== container) {
-        container.appendChild(renderer.domElement);
+        renderer.domElement.addEventListener('pointermove', onPointerMove);
     }
-
+    if (renderer.domElement.parentElement !== container) container.appendChild(renderer.domElement);
     if (!labelRenderer) {
         labelRenderer = new CSS2DRenderer();
         labelRenderer.domElement.style.position = 'absolute';
         labelRenderer.domElement.style.inset = '0';
         labelRenderer.domElement.style.pointerEvents = 'none';
-        container.appendChild(labelRenderer.domElement);
-    } else if (labelRenderer.domElement.parentElement !== container) {
-        container.appendChild(labelRenderer.domElement);
     }
-
+    if (labelRenderer.domElement.parentElement !== container) container.appendChild(labelRenderer.domElement);
     if (!controls) {
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.08;
-        controls.enablePan = true;
+        controls.screenSpacePanning = false;
         controls.minDistance = 8;
-        controls.maxDistance = 24;
-        controls.maxPolarAngle = Math.PI / 2.3;
-        controls.minPolarAngle = 0.2;
-        controls.target.set(0, 0, 0);
-        controls.update();
+        controls.maxDistance = 34;
+        controls.minPolarAngle = 0.35;
+        controls.maxPolarAngle = 1.05;
+        controls.minAzimuthAngle = -0.6;
+        controls.maxAzimuthAngle = 0.6;
+        controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+        controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+        resetCamera();
     }
-
-    const w = container.clientWidth || 1;
-    const h = container.clientHeight || 1;
-    renderer.setSize(w, h);
-    labelRenderer.setSize(w, h);
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-
-    if (resizeObserver) resizeObserver.disconnect();
-    resizeObserver = new ResizeObserver(() => {
-        if (!container) return;
-        const cw = container.clientWidth || 1;
-        const ch = container.clientHeight || 1;
-        renderer.setSize(cw, ch);
-        labelRenderer.setSize(cw, ch);
-        camera.aspect = cw / ch;
+    controls.enabled = !attract;
+    const resize = () => {
+        const w = container.clientWidth || 1, h = container.clientHeight || 1;
+        renderer.setSize(w, h);
+        labelRenderer.setSize(w, h);
+        camera.aspect = w / h;
         camera.updateProjectionMatrix();
-    });
+    };
+    resize();
+    if (resizeObserver) resizeObserver.disconnect();
+    resizeObserver = new ResizeObserver(resize);
     resizeObserver.observe(container);
-
     if (pendingSnapshot) {
         applySnapshot(pendingSnapshot);
         pendingSnapshot = null;
     }
-
     if (rafId) cancelAnimationFrame(rafId);
     animate();
 }
@@ -497,4 +767,21 @@ function stop() {
     }
 }
 
-window.Map3D = { mount, sync, onSelect, stop };
+function setAttract(on) {
+    if (attract === on) return;
+    attract = on;
+    if (controls) controls.enabled = !on;
+    if (!on) resetCamera();
+}
+
+function focus(id) {
+    const e = nodesById.get(id);
+    if (!e || !controls) return;
+    focusAnim = { from: controls.target.clone(), to: new THREE.Vector3(e.group.position.x, 0, e.group.position.z + 0.6), k: 0 };
+}
+
+function pulse(id, color = 0x0ac8b9) {
+    if (scene) spawnPulse(id, color);
+}
+
+window.Map3D = { mount, sync, onSelect, stop, setAttract, focus, pulse };

@@ -701,65 +701,65 @@ const HEROES = [
 const MAP_NODES = [
     {
         id: 'alpha7', name: 'Alpha-7', icon: '◆', type: 'home', tier: 0,
-        pos: {x: 50, y: 62}, links: [{to: 'lyon', turns: 2}, {to: 'marseille', turns: 2}, {to: 'ruine', turns: 3}, {to: 'turin', turns: 2}],
+        geo: {lon: 6.45, lat: 45.55}, pos: {x: 50, y: 62}, links: [{to: 'lyon', turns: 2}, {to: 'marseille', turns: 2}, {to: 'ruine', turns: 3}, {to: 'turin', turns: 2}],
         prod: {},
         garrisonBudget: 0,
         desc: 'Le dôme. Dernier bastion vivant sous les Alpes. Sa chute est la fin.'
     },
     {
         id: 'lyon', name: 'Lyon', icon: '🏙️', type: 'city', tier: 1,
-        pos: {x: 46, y: 50}, links: [{to: 'alpha7', turns: 2}, {to: 'outpost', turns: 3}, {to: 'turin', turns: 2}, {to: 'nexus', turns: 3}],
+        geo: {lon: 4.84, lat: 45.76}, pos: {x: 46, y: 50}, links: [{to: 'alpha7', turns: 2}, {to: 'outpost', turns: 3}, {to: 'turin', turns: 2}, {to: 'nexus', turns: 3}],
         prod: {data: 4, influence: 2}, garrisonBudget: 14, allyCost: 15, unlocksChapter: 2,
         desc: 'Cité-État marchande, ses réseaux de données irriguent le Rhône. Alliable ou prenable.'
     },
     {
         id: 'marseille', name: 'Marseille', icon: '⚓', type: 'city', tier: 1,
-        pos: {x: 52, y: 74}, links: [{to: 'alpha7', turns: 2}, {to: 'ruine', turns: 2}, {to: 'turin', turns: 3}],
+        geo: {lon: 5.37, lat: 43.3}, pos: {x: 52, y: 74}, links: [{to: 'alpha7', turns: 2}, {to: 'ruine', turns: 2}, {to: 'turin', turns: 3}],
         prod: {materials: 5, energy: 2}, garrisonBudget: 16, allyCost: 20, unlocksChapter: 2,
         desc: 'Port fortifié, fonderies et panneaux solaires. Fière, elle se défend durement.'
     },
     {
         id: 'ruine', name: 'Ruines du CERN', icon: '☢️', type: 'ruin', tier: 1,
-        pos: {x: 60, y: 56}, links: [{to: 'alpha7', turns: 3}, {to: 'marseille', turns: 2}, {to: 'outpost', turns: 3}, {to: 'zurich', turns: 2}],
+        geo: {lon: 6.3, lat: 46.6}, pos: {x: 60, y: 56}, links: [{to: 'alpha7', turns: 3}, {to: 'marseille', turns: 2}, {to: 'outpost', turns: 3}, {to: 'zurich', turns: 2}],
         prod: {}, garrisonBudget: 8, cache: {materials: 30, data: 25}, unlocksChapter: 2,
         desc: 'Complexe pré-guerre pillé par des automates errants. Un butin dort dans ses caches.'
     },
     {
         id: 'outpost', name: 'Avant-poste Strasbourg', icon: '🛑', type: 'outpost', tier: 2,
-        pos: {x: 58, y: 38}, links: [{to: 'lyon', turns: 3}, {to: 'ruine', turns: 3}, {to: 'berlin', turns: 4}, {to: 'zurich', turns: 2}, {to: 'nexus', turns: 3}],
+        geo: {lon: 7.75, lat: 48.58}, pos: {x: 58, y: 38}, links: [{to: 'lyon', turns: 3}, {to: 'ruine', turns: 3}, {to: 'berlin', turns: 4}, {to: 'zurich', turns: 2}, {to: 'nexus', turns: 3}],
         prod: {materials: 3, energy: 3}, garrisonBudget: 24, weakensCapital: 10, unlocksChapter: 3,
         desc: 'Verrou blindé d\'Hegemonia sur le Rhin. Le prendre coupe les vivres de Berlin.'
     },
     {
         id: 'berlin', name: 'Berlin-Hegemonia', icon: '☠️', type: 'capital', tier: 3,
-        pos: {x: 66, y: 26}, links: [{to: 'outpost', turns: 4}, {to: 'munich', turns: 3}],
+        geo: {lon: 13.4, lat: 52.52}, pos: {x: 66, y: 26}, links: [{to: 'outpost', turns: 4}, {to: 'munich', turns: 3}],
         prod: {}, garrisonBudget: 42,
         desc: 'Cœur de la confédération militarisée. La prendre met fin à la guerre.'
     },
     {
         id: 'turin', name: 'Turin', icon: '🏭', type: 'city', tier: 1,
-        pos: {x: 38, y: 66},
+        geo: {lon: 7.68, lat: 45.07}, pos: {x: 38, y: 66},
         links: [{to: 'alpha7', turns: 2}, {to: 'lyon', turns: 2}, {to: 'marseille', turns: 3}],
         prod: {materials: 4, energy: 3}, garrisonBudget: 15, allyCost: 18,
         desc: 'Cité-forge des Alpes, ses hauts-fourneaux crachent l\'acier jour et nuit. Fière de son indépendance — à rallier ou à soumettre.'
     },
     {
         id: 'zurich', name: 'Ruines de Zurich', icon: '🏦', type: 'ruin', tier: 2,
-        pos: {x: 66, y: 48},
+        geo: {lon: 8.54, lat: 47.37}, pos: {x: 66, y: 48},
         links: [{to: 'ruine', turns: 2}, {to: 'outpost', turns: 2}, {to: 'munich', turns: 3}],
         prod: {}, garrisonBudget: 12, cache: {energy: 25, data: 20, materials: 15},
         desc: 'Anciennes chambres fortes converties en dépôt par des maraudeurs. Carrefour disputé : qui la tient contrôle la route de l\'Est.'
     },
     {
         id: 'munich', name: 'Avant-poste Munich', icon: '⛓️', type: 'outpost', tier: 2,
-        pos: {x: 74, y: 38},
+        geo: {lon: 11.58, lat: 48.14}, pos: {x: 74, y: 38},
         links: [{to: 'zurich', turns: 3}, {to: 'berlin', turns: 3}],
         prod: {materials: 2, energy: 2}, garrisonBudget: 18, weakensCapital: 6,
         desc: 'Verrou méridional d\'Hegemonia, moins fortifié que Strasbourg mais gardant la voie rapide vers Berlin. Le prendre étrangle un second convoi.'
     },
     {
         id: 'nexus', name: 'Nexus ENIAC', icon: '🧿', type: 'nexus', tier: 2,
-        pos: {x: 40, y: 42},
+        geo: {lon: 5.04, lat: 47.32}, pos: {x: 40, y: 42},
         links: [{to: 'lyon', turns: 3}, {to: 'outpost', turns: 3}],
         prod: {data: 6}, garrisonBudget: 22,
         desc: 'Datacenter militaire enfoui, gardé par des automates increvables. On murmure qu\'une intelligence dort dans ses baies noyées d\'azote. PROMETHEUS convoite ce savoir.'

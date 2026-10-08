@@ -1,407 +1,545 @@
 let centerView = 'map';
-let selectedNode = 'alpha7';
+let selectedNode = null;
+let openDrawer = null;
 let mapLinksCache = null;
+let lastCommand = null;
+let lastResources = null;
 
-function render() {
-    renderRes();
-    if (state.phase === 'build') {
-        renderBuildPhase();
-    } else {
-        renderBattle();
-    }
-    document.getElementById('btn-endturn').disabled = state.phase !== 'build';
-    document.getElementById('btn-endturn').style.display = state.phase === 'build' ? '' : 'none';
-    document.getElementById('btn-research').style.display = state.phase === 'build' ? '' : 'none';
+const ICONS = {
+    res: {energy: 'lightning', materials: 'nut', data: 'database', stability: 'bank', influence: 'globe-hemisphere-west'},
+    node: {home: 'castle-turret', city: 'buildings', ruin: 'radioactive', outpost: 'barricade', capital: 'skull', nexus: 'cpu'},
+    unit: {sentinelle: 'shield', mech: 'robot', drone: 'drone', biosoldat: 'dna', agent: 'detective', titanUnit: 'robot'},
+    hero: {valkyrie: 'bird', oracle: 'sparkle', avatar: 'eye'},
+    building: {reacteur: 'atom', usine: 'factory', centreDonnees: 'hard-drives', quartiers: 'house-line', caserne: 'sword', hangar: 'warehouse', labo: 'flask', antenne: 'broadcast', bouclier: 'shield-check', titan: 'robot'},
+    branch: {DOCTRINE: 'gear-six', GUERRE: 'sword', SINGULARITE: 'brain'},
+    toast: {build: 'hammer', warning: 'warning-diamond', chapter: 'seal-check', event: 'scroll', '': 'info'}
+};
+
+const BRANCH_COLOR = {DOCTRINE: 'var(--materials)', GUERRE: 'var(--st-hostile)', SINGULARITE: 'var(--data)'};
+const STATUS_LABEL = {player: 'Sous contrôle', allied: 'Allié', neutral: 'Neutre', hostile: 'Hostile'};
+const TYPE_LABEL = {home: 'Dôme souverain', city: 'Cité-État', ruin: 'Ruines', outpost: 'Avant-poste d\'Hegemonia', capital: 'Capitale ennemie', nexus: 'Site interdit'};
+const EMOJI_RES = [['🏛️', 'stability'], ['🏛', 'stability'], ['⚡', 'energy'], ['🔩', 'materials'], ['💾', 'data'], ['🌐', 'influence']];
+
+function ic(name, cls = '') {
+    return `<i class="ph-duotone ph-${name}${cls ? ' ' + cls : ''}"></i>`;
 }
 
-const gt = { el: null };
+function resIcon(k) {
+    return ic(ICONS.res[k], 'ri ' + k);
+}
+
+function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
+function richText(s) {
+    let out = esc(s);
+    const marks = [];
+    EMOJI_RES.forEach(([emo, k]) => {
+        out = out.split(emo).join('\u0000' + marks.length + '\u0000');
+        marks.push(resIcon(k));
+    });
+    out = out.replace(/[\p{Extended_Pictographic}\u2B06\u2B07\u2702\u25B6\u25BA\u2550]\uFE0F?/gu, '').replace(/\uFE0F/g, '').replace(/\s{2,}/g, ' ').trim();
+    return out.replace(/\u0000(\d+)\u0000/g, (_, i) => marks[i]);
+}
+
+function costHtml(cost) {
+    return '<span class="cost">' + Object.entries(cost).map(([k, v]) =>
+        `<span class="${(state.resources[k] || 0) < v ? 'short' : ''}">${resIcon(k)}${v}</span>`).join('') + '</span>';
+}
+
+function fxHtml(effects) {
+    return '<span class="fx">' + Object.entries(effects).map(([k, v]) =>
+        `<span class="${v >= 0 ? 'pos' : 'neg'}">${resIcon(k)}${v > 0 ? '+' : ''}${v}</span>`).join('') + '</span>';
+}
+
+function cmdChip() {
+    return `<span class="cmd-chip">${ic('diamond')}1</span>`;
+}
+
+function blockReason(cost, needsCmd) {
+    if (needsCmd && state.command < 1) return 'Plus de points de commandement ce tour';
+    if (cost && !canAfford(cost)) return 'Ressources insuffisantes';
+    return '';
+}
+
+function render() {
+    const inBattle = state.phase !== 'build';
+    document.body.classList.toggle('in-battle', inBattle);
+    renderTop();
+    if (inBattle) renderBattle();
+    else renderBuildPhase();
+    guideUpdate();
+}
+
+const gt = {el: null};
 
 function initTooltip() {
     gt.el = document.getElementById('g-tooltip');
     document.addEventListener('mouseover', e => {
         const wrap = e.target.closest('[data-tt]');
-        if (!wrap) { gt.el.classList.remove('visible'); return; }
+        if (!wrap || !wrap.dataset.tt) {
+            gt.el.classList.remove('visible');
+            return;
+        }
         gt.el.innerHTML = wrap.dataset.tt;
         gt.el.classList.add('visible');
         positionTooltip(wrap);
     });
     document.addEventListener('mouseout', e => {
-        if (!e.target.closest('[data-tt]')) gt.el.classList.remove('visible');
-    });
-    document.addEventListener('mousemove', e => {
-        if (!gt.el.classList.contains('visible')) return;
-        const wrap = e.target.closest('[data-tt]');
-        if (wrap) positionTooltip(wrap);
+        if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('[data-tt]')) gt.el.classList.remove('visible');
     });
 }
 
 function positionTooltip(el) {
     const r = el.getBoundingClientRect();
     const tw = gt.el.offsetWidth, th = gt.el.offsetHeight;
-    let top = r.bottom + 8;
+    let top = r.bottom + 10;
     let left = r.left + r.width / 2 - tw / 2;
-    if (top + th > window.innerHeight - 8) top = r.top - th - 8;
-    if (left < 8) left = 8;
-    if (left + tw > window.innerWidth - 8) left = window.innerWidth - tw - 8;
+    if (top + th > window.innerHeight - 8) top = r.top - th - 10;
+    left = Math.max(8, Math.min(left, window.innerWidth - tw - 8));
     gt.el.style.top = top + 'px';
     gt.el.style.left = left + 'px';
 }
 
-function unitTtData(u) {
-    const specials = [];
-    if (u.heals) specials.push('Régénère <span>' + u.heals + ' PV</span>/tour');
-    if (u.dodge) specials.push('Esquive <span>' + (u.dodge * 100) + '%</span> des attaques');
-    if (u.frontline) specials.push('Ligne avant');
-    if (!u.frontline) specials.push('Ligne arrière — passe la ligne si <span>SPD ≥ 6</span>');
-    if (u.size > 1) specials.push('Occupe <span>' + u.size + '</span> slots d\'armée');
-    return '<div class="tt-title">' + u.icon + ' ' + u.name + '</div>'
-        + '<div class="tt-row">PV <span>' + u.hp + '</span> · ATK <span>' + u.atk + '</span> · DEF <span>' + u.def + '</span> · SPD <span>' + u.spd + '</span></div>'
-        + (specials.length ? '<div class="tt-row" style="margin-top:5px">' + specials.join('<br>') + '</div>' : '');
+function initKeys() {
+    document.addEventListener('keydown', e => {
+        if (e.key !== 'Escape') return;
+        const rs = document.getElementById('research-overlay');
+        if (rs.classList.contains('active')) return toggleResearch();
+        if (openDrawer) return toggleDrawer(openDrawer);
+        if (selectedNode) closeNodePanel();
+    });
 }
 
-function renderRes() {
-    const bar = document.getElementById('resource-bar');
-    const prod = getProduction();
+function tt(title, body) {
+    return esc(`<div class="tt-title">${title}</div><div class="tt-row">${body}</div>`);
+}
+
+function unitTtData(u) {
+    const specials = [];
+    if (u.heals) specials.push('Régénère <span>' + u.heals + ' PV</span> par round');
+    if (u.dodge) specials.push('Esquive <span>' + (u.dodge * 100) + '%</span> des attaques');
+    specials.push(u.frontline ? 'Ligne avant' : 'Ligne arrière, frappe l\'arrière ennemi si <span>VIT ≥ 6</span>');
+    if (u.size > 1) specials.push('Occupe <span>' + u.size + '</span> places');
+    return tt(u.name, `PV <span>${u.hp}</span> · ATK <span>${u.atk}</span> · DEF <span>${u.def}</span> · VIT <span>${u.spd}</span><br>${specials.join('<br>')}`);
+}
+
+function statsHtmlUnit(u) {
+    return `<span class="stats"><span>PV<b>${u.hp}</b></span><span>ATK<b>${u.atk}</b></span><span>DEF<b>${u.def}</b></span><span>VIT<b>${u.spd}</b></span></span>`;
+}
+
+function renderTop() {
+    const prod = getCampaignProduction();
+    const bumped = [];
     let html = '';
     for (const [k, meta] of Object.entries(RES_META)) {
         const v = state.resources[k];
         const p = prod[k] + (k === 'stability' ? (v > 40 ? -1 : v < 40 ? 1 : 0) : 0);
-        const pc = p >= 0 ? 'pos' : 'neg';
         const critical = k === 'stability' && v <= 20;
-        const ttContent = '<div class=&quot;tt-title&quot;>' + meta.icon + ' ' + meta.label + '</div>'
-            + '<div class=&quot;tt-row&quot;>Valeur : <span>' + v + ' / ' + meta.max + '</span></div>'
-            + '<div class=&quot;tt-row&quot;>Production : <span>' + (p >= 0 ? '+' : '') + p + ' / tour</span></div>'
-            + (critical ? '<div class=&quot;tt-row&quot; style=&quot;color:var(--danger);margin-top:4px&quot;>⚠ Stabilité critique !</div>' : '');
-        html += '<div class="res-item" data-tt="' + ttContent + '" style="border-color:' + (critical ? 'var(--danger)' : meta.color + '22') + '">'
-            + '<span>' + meta.icon + '</span>'
-            + ' <span class="res-val' + (critical ? ' stab-critical' : '') + '" style="color:' + meta.color + '">' + v + '</span>'
-            + '<span style="color:var(--dim);font-size:.72rem">/' + meta.max + '</span>'
-            + ' <span class="res-prod ' + pc + '">' + (p >= 0 ? '+' : '') + p + '/t</span>'
-            + '</div>';
+        if (lastResources && lastResources[k] !== v) bumped.push(k);
+        const body = `Réserve <span>${v} / ${meta.max}</span><br>Par tour <span>${p >= 0 ? '+' : ''}${p}</span>` + (critical ? '<br><span style="color:var(--danger)">Stabilité critique : risque de révolte</span>' : '');
+        html += `<div class="res${critical ? ' critical' : ''}${bumped.includes(k) ? ' bump' : ''}" data-tt="${tt(meta.label, body)}">${resIcon(k)}<span class="res-val">${v}</span><span class="res-prod${p < 0 ? ' neg' : ''}">${p >= 0 ? '+' : ''}${p}</span></div>`;
     }
-    const cmdTt = '<div class=&quot;tt-title&quot;>Points de commandement</div><div class=&quot;tt-row&quot;>Chaque action stratégique (bâtir, améliorer, rechercher, déplacer, fortifier) coûte 1 point.<br>Réinitialisés chaque tour.</div>';
-    html += '<div class="res-info">'
-        + '<span>Tour ' + state.turn + '</span>'
-        + '<span>' + CHAPTERS[state.chapter - 1].name + '</span>'
-        + '<span>Armée: ' + getArmySize() + '/' + getArmyCap() + '</span>'
-        + '<span class="' + (state.command === 0 ? 'cmd-zero' : '') + '" data-tt="' + cmdTt + '" style="display:flex;align-items:center;gap:2px;border-left:1px solid var(--gb);padding-left:16px;cursor:default">'
-        + '⚡ CMD ' + state.command + '/' + getCommandMax()
-        + '</span>'
-        + '</div>';
-    bar.innerHTML = html;
+    lastResources = {...state.resources};
+    document.getElementById('res-plates').innerHTML = html;
+
+    const ch = CHAPTERS[state.chapter - 1];
+    document.getElementById('turn-cartouche').innerHTML = `<span class="tc-turn">Tour ${state.turn}</span><span class="tc-chapter">Chapitre ${ch.num} · ${ch.name}</span>`;
+
+    const max = getCommandMax();
+    let pips = '';
+    for (let i = 0; i < max; i++) {
+        const spent = lastCommand !== null && i >= state.command && i < lastCommand;
+        pips += `<i class="pip${i < state.command ? ' on' : ''}${spent ? ' spent' : ''}"></i>`;
+    }
+    lastCommand = state.command;
+    document.getElementById('cmd').innerHTML = `<span class="cmd-label">Commandement</span><span class="pips">${pips}</span>`;
+    document.getElementById('cmd').dataset.tt = tt('Points de commandement', `Bâtir, améliorer, rechercher, déplacer l'armée, attaquer, fortifier ou s'allier coûte <span>1 point</span>.<br>Recruter est gratuit. Les points reviennent à chaque tour.`);
 }
 
 function setCenterView(v) {
     centerView = v;
+    if (v === 'base') openDrawer = 'dome';
     renderBuildPhase();
 }
 
-function buildMapSnapshot() {
-    const m = state.map;
+function toggleDrawer(name) {
+    openDrawer = openDrawer === name ? null : name;
+    renderBuildPhase();
+}
+
+function selectNode(id) {
+    selectedNode = id;
+    if (centerView !== 'map') centerView = 'map';
+    renderBuildPhase();
+}
+
+function closeNodePanel() {
+    selectedNode = null;
+    renderBuildPhase();
+}
+
+function focusThreat(id) {
+    selectNode(id);
+    if (window.Map3D && Map3D.focus) Map3D.focus(id);
+}
+
+function nodeStatus(id, s = state) {
+    return s.map.owner[id] === 'player' ? 'player' : (s.map.allied[id] ? 'allied' : s.map.owner[id]);
+}
+
+function buildMapSnapshot(s = state) {
+    const m = s.map;
+    const reach = new Set();
+    if (m.armyAt && !m.armyDest) getNode(m.armyAt).links.forEach(l => reach.add(l.to));
     const nodes = MAP_NODES.map(n => {
-        const status = m.owner[n.id] === 'player' ? 'player' : (m.allied[n.id] ? 'allied' : m.owner[n.id]);
         const threat = m.threats.filter(t => t.nodeId === n.id).sort((a, b) => a.arrivesIn - b.arrivesIn)[0];
         return {
-            id: n.id, name: n.name, icon: n.icon, x: n.pos.x, y: n.pos.y,
-            status, selected: n.id === selectedNode,
-            threat: threat ? threat.arrivesIn : null,
-            tier: n.tier, type: n.type
+            id: n.id, name: n.name, glyph: ICONS.node[n.type], lon: n.geo.lon, lat: n.geo.lat,
+            status: nodeStatus(n.id, s), selected: s === state && n.id === selectedNode,
+            threat: threat ? threat.arrivesIn : null, type: n.type
         };
     });
     if (!mapLinksCache) {
         const seen = new Set();
         mapLinksCache = [];
-        MAP_NODES.forEach(n => {
-            n.links.forEach(l => {
-                const key = [n.id, l.to].sort().join('|');
-                if (seen.has(key)) return;
-                seen.add(key);
-                const other = getNode(l.to);
-                if (!other) return;
-                mapLinksCache.push({ax: n.pos.x, ay: n.pos.y, bx: other.pos.x, by: other.pos.y});
-            });
-        });
+        MAP_NODES.forEach(n => n.links.forEach(l => {
+            const key = [n.id, l.to].sort().join('|');
+            if (seen.has(key)) return;
+            seen.add(key);
+            mapLinksCache.push({a: n.id, b: l.to, turns: l.turns});
+        }));
     }
-    const links = mapLinksCache;
+    const links = mapLinksCache.map(l => ({...l, active: !!m.armyAt && !m.armyDest && (l.a === m.armyAt || l.b === m.armyAt)}));
     let army = null;
-    if (m.armyAt) {
-        const n = getNode(m.armyAt);
-        if (n) army = {x: n.pos.x, y: n.pos.y};
-    } else if (m.armyDest) {
-        const from = getNode(m.armyFrom);
-        const dest = getNode(m.armyDest);
-        if (from && dest) {
-            const total = linkTurns(m.armyFrom, m.armyDest) || 1;
-            const progress = Math.max(0, Math.min(1, 1 - m.armyEta / total));
-            army = {fromX: from.pos.x, fromY: from.pos.y, toX: dest.pos.x, toY: dest.pos.y, progress};
-        }
+    if (m.armyAt) army = {at: m.armyAt};
+    else if (m.armyDest) {
+        const total = linkTurns(m.armyFrom, m.armyDest) || 1;
+        army = {from: m.armyFrom, to: m.armyDest, progress: Math.max(0, Math.min(1, 1 - m.armyEta / total))};
     }
-    return {nodes, links, army};
+    return {nodes, links, army, reach: [...reach]};
+}
+
+function mountTitleMap() {
+    if (!window.Map3D || !document.getElementById('title-screen').classList.contains('active')) return;
+    Map3D.mount(document.getElementById('title-map'));
+    Map3D.sync(buildMapSnapshot(defaultState()));
+    Map3D.setAttract(true);
+}
+
+function setStageView(id) {
+    document.querySelectorAll('.stage-view').forEach(el => el.classList.toggle('on', el.id === id));
 }
 
 function renderBuildPhase() {
-    const lp = document.getElementById('left-panel');
-    const coreCost = getCoreUpgradeCost();
-    const coreDiamonds = [1, 2, 3].map(i => '<span style="opacity:' + (i <= state.core ? '1' : '0.3') + '">' + (i <= state.core ? '◆' : '◇') + '</span>').join('');
-    let lhtml = '<div class="panel" id="core-panel"><h3>Cœur d\'Alpha-7</h3>'
-        + '<div class="core-lvl">' + coreDiamonds + '</div>'
-        + '<div class="core-desc">+2 armée max / niveau · niv. requis pour les recherches avancées</div>'
-        + (coreCost
-            ? '<div class="core-upgrade"><button ' + (canAfford(coreCost) ? '' : 'disabled') + ' onclick="upgradeCore()">Améliorer — ' + Object.entries(coreCost).map(([k, v]) => v + RES_META[k].icon).join(' ') + '</button></div>'
-            : '<div class="core-max">NIVEAU MAX</div>')
-        + '</div>';
-    lhtml += '<div class="panel"><h3>Bâtiments</h3>';
-    for (let ch = 1; ch <= 3; ch++) {
-        const cb = BUILDINGS.filter(b => b.chapter === ch);
-        lhtml += '<div style="font-size:.6rem;color:var(--dim);letter-spacing:.1em;margin:6px 0 3px;text-transform:uppercase">Ch.' + ch + ' — ' + CHAPTERS[ch - 1].name + '</div>';
-        cb.forEach(b => {
-            const built = isBuilt(b.id), locked = !isBuildingUnlocked(b), aff = canAfford(b.cost);
-            const cls = built ? 'build-item built' : locked ? 'build-item locked' : 'build-item';
-            const costStr = Object.entries(b.cost).map(([k, v]) => v + RES_META[k].icon).join(' ');
-            let btn;
-            if (built) {
-                const lvl = getBuildingLevel(b.id);
-                const upCost = getUpgradeCost(b.id);
-                btn = '<div class="bi-lvl-wrap"><span class="bi-lvl">Nv.' + lvl + (upCost ? '' : ' MAX') + '</span>'
-                    + (upCost
-                        ? '<button class="bi-upgrade" data-tt="Améliorer → Nv.' + (lvl + 1) + '<br>' + Object.entries(upCost).map(([k, v]) => v + RES_META[k].icon).join(' ') + '<br>production ×' + (lvl + 1) + '" ' + (canAfford(upCost) ? '' : 'disabled') + ' onclick="upgradeBuilding(\'' + b.id + '\')">⬆</button>'
-                        : '')
-                    + '</div>';
-            } else if (locked) {
-                if (b.research && !hasResearch(b.research)) {
-                    const r = RESEARCH.find(x => x.id === b.research);
-                    btn = '<span data-tt="Requiert la recherche : ' + (r ? r.icon + ' ' + r.name : b.research) + '">🔬</span>';
-                } else {
-                    btn = '🔒';
-                }
-            } else {
-                btn = '<div class="bi-btn"><button ' + (aff ? '' : 'disabled') + ' onclick="buildBuilding(\'' + b.id + '\')">Bâtir</button></div>';
-            }
-            lhtml += '<div class="' + cls + '"><div class="bi-icon">' + b.icon + '</div><div class="bi-info"><div class="bi-name">' + b.name + '</div><div class="bi-detail">' + costStr + ' — ' + b.desc + '</div></div>' + btn + '</div>';
-        });
-    }
-    lhtml += '</div>';
-
-    lhtml += '<div class="panel log-section"><h3>Journal</h3><div class="log-entries">';
-    state.log.slice(-15).forEach(e => {
-        lhtml += '<div class="log-entry ' + e.cls + '">' + e.text + '</div>';
-    });
-    lhtml += '</div></div>';
-    lp.innerHTML = lhtml;
-    const logEl = lp.querySelector('.log-entries');
-    if (logEl) logEl.scrollTop = logEl.scrollHeight;
-
-    const cp = document.getElementById('center-panel');
-    if (!document.getElementById('view-tabs')) {
-        cp.innerHTML = '<div id="view-tabs">'
-            + '<button id="tab-map" onclick="setCenterView(\'map\')">🗺️ CARTE</button>'
-            + '<button id="tab-base" onclick="setCenterView(\'base\')">🏠 BASE</button>'
-            + '</div>'
-            + '<div id="base3d-wrap"><div id="base3d-view"></div><div id="base3d-hint">GLISSER POUR ORBITER · MOLETTE POUR ZOOMER</div></div>'
-            + '<div id="map3d-wrap"><div id="map3d-view"></div></div>';
-    }
-    document.getElementById('tab-map').classList.toggle('active', centerView === 'map');
-    document.getElementById('tab-base').classList.toggle('active', centerView === 'base');
-    document.getElementById('base3d-wrap').style.display = centerView === 'base' ? 'block' : 'none';
-    document.getElementById('map3d-wrap').style.display = centerView === 'map' ? 'block' : 'none';
+    if (window.Battle3D && Battle3D.stop) Battle3D.stop();
+    document.getElementById('vs-map').classList.toggle('active', centerView === 'map');
+    document.getElementById('vs-base').classList.toggle('active', centerView === 'base');
     if (centerView === 'base') {
         if (window.Map3D) Map3D.stop();
+        setStageView('base3d-view');
         if (window.Base3D) {
             Base3D.mount(document.getElementById('base3d-view'));
             Base3D.sync(state.buildings, state.buildingLevels, state.core, state.research.map(id => (RESEARCH.find(r => r.id === id) || {}).branch));
         }
     } else {
         if (window.Base3D) Base3D.stop();
+        setStageView('map3d-view');
         if (window.Map3D) {
+            Map3D.setAttract(false);
             Map3D.mount(document.getElementById('map3d-view'));
             Map3D.sync(buildMapSnapshot());
-            Map3D.onSelect(id => { selectedNode = id; renderBuildPhase(); });
+            Map3D.onSelect(id => id ? selectNode(id) : (selectedNode && closeNodePanel()));
         }
     }
 
-    const node = getNode(selectedNode);
-    const nOwner = state.map.owner[selectedNode];
-    const nAllied = state.map.allied[selectedNode];
-    const nStatus = nOwner === 'player' ? 'player' : (nAllied ? 'allied' : nOwner);
-    const statusLabel = {player: 'VÔTRE', allied: 'ALLIÉ', neutral: 'NEUTRE', hostile: 'HOSTILE'}[nStatus] || nStatus;
-    let chtml = '<div class="panel node-panel"><h3>' + node.icon + ' ' + node.name + '</h3>'
-        + '<div class="node-badge ' + nStatus + '">' + statusLabel + '</div>'
-        + '<div class="node-desc">' + node.desc + '</div>';
-    if (nOwner === 'player' || nAllied) {
-        const prodStr = Object.entries(node.prod || {}).map(([k, v]) => '+' + v + RES_META[k].icon).join(' ');
-        if (prodStr) chtml += '<div class="node-prod">' + prodStr + ' /tour</div>';
-    }
-    const nodeThreat = state.map.threats.filter(t => t.nodeId === selectedNode).sort((a, b) => a.arrivesIn - b.arrivesIn)[0];
-    if (nodeThreat) {
-        const preview = getForcePreview(nodeThreat.budget, nodeThreat.seed);
-        chtml += '<div class="node-threat">⚠️ Menace dans ' + nodeThreat.arrivesIn + ' tour(s) — ' + preview.map(e => e.icon + '×' + e.count).join(' ') + '</div>';
-    }
-    if (nOwner !== 'player' && !nAllied) {
-        const garrisonPreview = getForcePreview(garrisonBudgetFor(node), seedFor(selectedNode) + state.turn);
-        chtml += '<div class="node-garrison">🛡️ Garnison estimée — ' + garrisonPreview.map(e => e.icon + '×' + e.count).join(' ') + '</div>';
-    }
-    const cmdBtnTt = '1 CMD';
-    const linkedToArmy = state.map.armyAt ? linkTurns(state.map.armyAt, selectedNode) : null;
-    chtml += '<div class="node-actions">';
-    if (nOwner === 'player' && !state.map.fortified[selectedNode]) {
-        chtml += '<button ' + (state.command < 1 ? 'disabled' : '') + ' data-tt="' + cmdBtnTt + '" onclick="fortifyNode(\'' + selectedNode + '\')">🧱 Fortifier</button>';
-    }
-    if (node.type === 'city' && nOwner === 'neutral' && !nAllied) {
-        chtml += '<button ' + (state.command < 1 || (state.resources.influence || 0) < node.allyCost ? 'disabled' : '') + ' data-tt="' + cmdBtnTt + '" onclick="allyCity(\'' + selectedNode + '\')">🤝 Allier (' + node.allyCost + '🌐)</button>';
-    }
-    if (linkedToArmy && !state.map.armyDest && (nStatus === 'hostile' || (node.type === 'city' && nStatus === 'neutral'))) {
-        chtml += '<button ' + (state.command < 1 ? 'disabled' : '') + ' data-tt="' + cmdBtnTt + '" onclick="attackNode(\'' + selectedNode + '\')">⚔️ Attaquer</button>';
-    }
-    if (linkedToArmy && !state.map.armyDest && (nStatus === 'player' || nStatus === 'allied') && state.map.armyAt !== selectedNode) {
-        chtml += '<button ' + (state.command < 1 ? 'disabled' : '') + ' data-tt="' + cmdBtnTt + '" onclick="moveArmy(\'' + selectedNode + '\')">🚚 Déplacer l\'armée ici</button>';
-    }
-    chtml += '</div>';
-    if (linkedToArmy) {
-        chtml += '<div class="node-distance">Distance depuis l\'armée : ' + linkedToArmy + ' tour(s)</div>';
-    } else if (state.map.armyAt) {
-        chtml += '<div class="node-distance">Pas de route directe depuis la position de l\'armée</div>';
-    }
-    chtml += '</div>';
+    document.querySelectorAll('.rail-btn[data-drawer]').forEach(b => b.classList.toggle('active', b.dataset.drawer === openDrawer));
+    renderRailDots();
+    renderDrawer();
+    renderNodePanel();
+    renderThreats();
+    renderEndTurn();
+    guideUpdate();
+}
 
-    const armyAt = state.map.armyAt;
-    const armyDest = state.map.armyDest;
-    const armyAtNode = armyAt ? getNode(armyAt) : null;
-    const armyTitle = armyDest
-        ? 'Armée (' + getArmySize() + '/' + getArmyCap() + ') — en transit vers ' + getNode(armyDest).name + ', arrivée dans ' + state.map.armyEta + ' tour(s)'
-        : 'Armée (' + getArmySize() + '/' + getArmyCap() + ') — à ' + (armyAtNode ? armyAtNode.name : '?');
-    const onOwnedNode = armyAt && !armyDest && state.map.owner[armyAt] === 'player';
-    chtml += '<div class="panel army-section"><h3>' + armyTitle + '</h3><div class="army-grid">';
+function renderRailDots() {
+    const dots = {
+        dome: BUILDINGS.some(b => !isBuilt(b.id) && isBuildingUnlocked(b) && canAfford(b.cost)) && state.command > 0,
+        heroes: HEROES.some(h => canRecruitHero(h)),
+        research: RESEARCH.some(r => canResearch(r) && canAfford(r.cost)) && state.command > 0
+    };
+    document.querySelectorAll('.rail-btn').forEach(b => {
+        const key = b.dataset.drawer || (b.id === 'btn-research' ? 'research' : null);
+        const has = !!dots[key];
+        let d = b.querySelector('.rail-dot');
+        if (has && !d) b.insertAdjacentHTML('beforeend', '<i class="rail-dot"></i>');
+        if (!has && d) d.remove();
+    });
+}
+
+function drawerShell(eyebrow, title, body) {
+    return `<div class="dr-head"><div><div class="eyebrow">${eyebrow}</div><h2>${title}</h2></div><button class="dr-close" onclick="toggleDrawer(openDrawer)" aria-label="Fermer">${ic('x')}</button></div><div class="dr-body">${body}</div>`;
+}
+
+function renderDrawer() {
+    const el = document.getElementById('drawer');
+    el.classList.toggle('open', !!openDrawer);
+    if (!openDrawer) return;
+    const scroll = el.querySelector('.dr-body') ? el.querySelector('.dr-body').scrollTop : 0;
+    const same = el.dataset.kind === openDrawer;
+    el.dataset.kind = openDrawer;
+    if (openDrawer === 'dome') el.innerHTML = drawerShell('Alpha-7', 'Le Dôme', domeBody());
+    else if (openDrawer === 'army') el.innerHTML = drawerShell('Forces', 'Armée de campagne', armyBody());
+    else if (openDrawer === 'heroes') el.innerHTML = drawerShell('Champions', 'Héros', heroesBody());
+    else if (openDrawer === 'log') el.innerHTML = drawerShell('Chroniques', 'Journal', logBody());
+    const body = el.querySelector('.dr-body');
+    if (openDrawer === 'log') body.scrollTop = body.scrollHeight;
+    else if (same) body.scrollTop = scroll;
+}
+
+function domeBody() {
+    const coreCost = getCoreUpgradeCost();
+    let h = `<button class="btn btn-ghost btn-block enter-dome" onclick="setCenterView('${centerView === 'base' ? 'map' : 'base'}')">${ic(centerView === 'base' ? 'map-trifold' : 'sign-in')}${centerView === 'base' ? 'Retour à la carte' : 'Entrer dans le dôme'}</button>`;
+    h += '<div class="sec-label">Cœur de PROMETHEUS</div>';
+    const reason = coreCost ? blockReason(coreCost, true) : '';
+    h += `<div class="core-card"><div class="core-gem"><span>${['', 'I', 'II', 'III'][state.core]}</span></div><div class="core-info"><div class="row-title">Niveau ${state.core} sur 3</div><div class="row-sub">Chaque niveau ajoute 2 places à l'armée et ouvre un palier de recherche.</div></div>`
+        + (coreCost
+            ? `<button class="btn btn-primary btn-block" ${reason ? 'disabled' : ''} data-tt="${esc(reason)}" onclick="upgradeCore()">${ic('arrow-up')}Éveiller ${costHtml(coreCost)}</button>`
+            : '<span class="tag">Éveil complet</span>')
+        + '</div>';
+    for (let ch = 1; ch <= 3; ch++) {
+        const list = BUILDINGS.filter(b => b.chapter === ch);
+        h += `<div class="sec-label">${CHAPTERS[ch - 1].name.charAt(0) + CHAPTERS[ch - 1].name.slice(1).toLowerCase()}<span class="count">Ch. ${ch}</span></div>`;
+        list.forEach(b => {
+            const built = isBuilt(b.id), locked = !isBuildingUnlocked(b);
+            const lvl = getBuildingLevel(b.id);
+            let action = '', meta = '';
+            if (built) {
+                const up = getUpgradeCost(b.id);
+                meta = `<span class="lvl">${[1, 2, 3].map(i => `<i class="${i <= lvl ? 'on' : ''}"></i>`).join('')}</span>` + (up ? costHtml(up) : '<span class="tag">Max</span>');
+                if (up) {
+                    const r = blockReason(up, true);
+                    action = `<button class="btn btn-primary btn-icon" ${r ? 'disabled' : ''} data-tt="${esc(r || 'Améliorer au niveau ' + (lvl + 1) + ' : production ×' + (lvl + 1))}" onclick="upgradeBuilding('${b.id}')" aria-label="Améliorer">${ic('arrow-up')}</button>`;
+                }
+            } else if (locked) {
+                const r = b.research && RESEARCH.find(x => x.id === b.research);
+                meta = `<span class="req">${ic('lock-simple')}${r ? 'Recherche : ' + esc(r.name) : 'Chapitre ' + b.chapter}</span>`;
+            } else {
+                const r = blockReason(b.cost, true);
+                meta = costHtml(b.cost);
+                action = `<button class="btn btn-primary" ${r ? 'disabled' : ''} data-tt="${esc(r)}" onclick="buildBuilding('${b.id}')">Bâtir</button>`;
+            }
+            h += `<div class="row${locked ? ' locked' : ''}"><div class="crest${built ? ' teal' : ''}">${ic(ICONS.building[b.id] || 'cube')}</div><div class="row-main"><div class="row-title">${esc(b.name)}</div><div class="row-sub">${richText(b.desc)}</div><div class="row-meta">${meta}</div></div>${action}</div>`;
+        });
+    }
+    return h;
+}
+
+function armyBody() {
+    const m = state.map;
+    const atNode = m.armyAt ? getNode(m.armyAt) : null;
+    const cap = getArmyCap(), size = getArmySize();
+    let where = m.armyDest
+        ? `En marche vers <b>${esc(getNode(m.armyDest).name)}</b>, arrivée dans ${m.armyEta} tour(s)`
+        : `Stationnée à <b>${esc(atNode ? atNode.name : '?')}</b>`;
+    let h = `<div class="fact">${ic('map-pin')}<span class="fact-l">${where}</span></div>`;
+    h += `<div class="sec-label">Effectifs<span class="count">${size} / ${cap}</span></div><div class="slots-bar">${Array.from({length: cap}, (_, i) => `<i class="${i < size ? 'on' : ''}"></i>`).join('')}</div>`;
+    const onOwned = m.armyAt && !m.armyDest && m.owner[m.armyAt] === 'player';
+    const transferTt = 'Transférer : 1 point de commandement couvre tous les transferts du tour';
+    if (!state.army.length) h += '<div class="empty">Aucune unité. Recrutez ci-dessous.</div>';
     state.army.forEach((id, i) => {
         const u = UNITS.find(x => x.id === id);
-        chtml += '<div class="army-unit" data-tt="' + unitTtData(u).replace(/"/g, '&quot;') + '"><span class="au-icon">' + u.icon + '</span><div><div class="au-name">' + u.name + (u.size > 1 ? ' (×' + u.size + ')' : '') + '</div><div class="au-stats">PV:' + u.hp + ' ATK:' + u.atk + ' DEF:' + u.def + ' SPD:' + u.spd + '</div></div>'
-            + (onOwnedNode ? '<button class="au-transfer" data-tt="Transfert — 1 CMD par tour (toutes les unités du tour)" onclick="transferToGarrison(' + i + ')">⤓</button>' : '')
-            + '<button class="au-dismiss" onclick="dismissUnit(' + i + ')">✕</button></div>';
+        h += `<div class="row" data-tt="${unitTtData(u)}"><div class="crest">${ic(ICONS.unit[u.id])}</div><div class="row-main"><div class="row-title">${esc(u.name)}${u.size > 1 ? `<span class="tag">×${u.size}</span>` : ''}</div><div class="row-meta">${statsHtmlUnit(u)}</div></div>`
+            + (onOwned ? `<button class="btn btn-ghost btn-icon" data-tt="${esc(transferTt)}" onclick="transferToGarrison(${i})" aria-label="Vers la garnison">${ic('arrow-down')}</button>` : '')
+            + `<button class="btn btn-ghost btn-icon" data-tt="Libérer l'unité" onclick="dismissUnit(${i})" aria-label="Libérer">${ic('x')}</button></div>`;
     });
-    if (!state.army.length) chtml += '<div style="color:var(--dim);font-size:.8rem;padding:8px">Aucune unité. Recrutez des troupes !</div>';
-    chtml += '</div>';
-    if (onOwnedNode) {
-        const g = state.map.garrisons[armyAt] || [];
-        chtml += '<div class="garrison-block"><div class="garrison-title">Garnison de ' + armyAtNode.name + ' (' + g.length + ')</div><div class="army-grid">';
+    if (onOwned) {
+        const g = m.garrisons[m.armyAt] || [];
+        h += `<div class="sec-label">Garnison de ${esc(atNode.name)}<span class="count">${g.length}</span></div>`;
+        if (!g.length) h += '<div class="empty">Garnison vide. Ce lieu tombera s\'il est attaqué sans armée.</div>';
         g.forEach((id, i) => {
             const u = UNITS.find(x => x.id === id);
-            chtml += '<div class="army-unit garrison-row" data-tt="' + unitTtData(u).replace(/"/g, '&quot;') + '"><span class="au-icon">' + u.icon + '</span><div><div class="au-name">' + u.name + (u.size > 1 ? ' (×' + u.size + ')' : '') + '</div></div><button class="au-transfer" data-tt="Transfert — 1 CMD par tour (toutes les unités du tour)" onclick="transferToArmy(' + i + ')">⤒</button></div>';
-        });
-        if (!g.length) chtml += '<div style="color:var(--dim);font-size:.75rem;padding:6px">Vide</div>';
-        chtml += '</div></div>';
-    }
-    chtml += '</div>';
-
-    chtml += '<div class="panel threats-section"><h3>Menaces</h3>';
-    const sortedThreats = [...state.map.threats].sort((a, b) => a.arrivesIn - b.arrivesIn);
-    if (!sortedThreats.length) {
-        chtml += '<div style="color:var(--dim);font-size:.8rem;padding:8px">Aucune menace détectée.</div>';
-    } else {
-        sortedThreats.forEach(t => {
-            const tn = getNode(t.nodeId);
-            const preview = getForcePreview(t.budget, t.seed);
-            chtml += '<div class="threat-item"><span class="threat-node">' + (tn ? tn.icon + ' ' + tn.name : t.nodeId) + '</span><span class="threat-eta">⚠️ ' + t.arrivesIn + ' tour(s)</span><span class="threat-preview">' + preview.map(e => e.icon + '×' + e.count).join(' ') + '</span></div>';
+            h += `<div class="row" data-tt="${unitTtData(u)}"><div class="crest">${ic(ICONS.unit[u.id])}</div><div class="row-main"><div class="row-title">${esc(u.name)}</div><div class="row-meta">${statsHtmlUnit(u)}</div></div><button class="btn btn-ghost btn-icon" data-tt="${esc(transferTt)}" onclick="transferToArmy(${i})" aria-label="Vers l'armée">${ic('arrow-up')}</button></div>`;
         });
     }
-    chtml += '</div>';
-
-    const heroTt = 'Les héros combattent automatiquement aux côtés de votre armée. Blessés 2 vagues s\'ils tombent. +1 slot via la recherche Éveil du TITAN.';
-    chtml += '<div class="panel hero-section"><h3 data-tt="' + heroTt + '">Héros (' + state.heroes.length + '/' + getHeroSlots() + ')</h3><div class="hero-grid">';
-    HEROES.forEach(h => {
-        const heroTtData = h.name + ' — ' + h.abilityName + '<br>' + h.abilityDesc + '<br>PV:' + h.hp + ' ATK:' + h.atk + ' DEF:' + h.def + ' SPD:' + h.spd;
-        if (state.heroes.includes(h.id)) {
-            const wounded = isHeroWounded(h.id);
-            chtml += '<div class="hero-card' + (wounded ? ' wounded' : '') + '" data-tt="' + heroTtData.replace(/"/g, '&quot;') + '"><span class="hero-icon">' + h.icon + '</span><div class="hero-info"><div class="hero-name"><span class="hero-star">★</span> ' + h.name + '</div><div class="hero-stats">PV:' + h.hp + ' ATK:' + h.atk + ' DEF:' + h.def + ' SPD:' + h.spd + '</div><div class="hero-ability">' + h.abilityName + ' — ' + h.abilityDesc + '</div>'
-                + (wounded ? '<div class="hero-wounded-badge">Blessé — ' + state.heroWounded[h.id] + ' vague(s)</div>' : '')
-                + '</div></div>';
-        } else if (hasResearch(h.research)) {
-            const costStr = Object.entries(h.cost).map(([k, v]) => v + RES_META[k].icon).join(' ');
-            const slotsFull = state.heroes.length >= getHeroSlots();
-            const aff = canRecruitHero(h);
-            chtml += '<div class="hero-card" data-tt="' + heroTtData.replace(/"/g, '&quot;') + '"><span class="hero-icon">' + h.icon + '</span><div class="hero-info"><div class="hero-name">' + h.name + '</div><div class="hero-stats">PV:' + h.hp + ' ATK:' + h.atk + ' DEF:' + h.def + ' SPD:' + h.spd + '</div><div class="hero-ability">' + h.abilityName + ' — ' + h.abilityDesc + '</div><div class="rc-cost">' + costStr + '</div></div>'
-                + (slotsFull ? '<span style="color:var(--dim);font-size:.7rem">Slots pleins</span>' : '<button ' + (aff ? '' : 'disabled') + ' onclick="recruitHero(\'' + h.id + '\')">+</button>')
-                + '</div>';
-        } else {
-            const r = RESEARCH.find(x => x.id === h.research);
-            chtml += '<div class="hero-card" style="opacity:.3"><span class="hero-icon">' + h.icon + '</span><div class="hero-info"><div class="hero-name">' + h.name + '</div><div class="hero-stats" style="color:var(--dim)">Requiert : ' + (r ? r.icon + ' ' + r.name : h.research) + '</div></div>🔬</div>';
+    const atHome = m.armyAt === 'alpha7' && !m.armyDest;
+    h += `<div class="sec-label">Recruter<span class="count">gratuit en commandement</span></div>`;
+    if (!atHome) h += `<div class="fact" style="margin-bottom:10px">${ic('info')}<span class="fact-l">L'armée est loin du dôme : les recrues rejoignent la garnison d'Alpha-7.</span></div>`;
+    h += '<div class="recruit-grid">';
+    UNITS.forEach(u => {
+        const unlocked = u.always || (u.building && isBuilt(u.building));
+        if (!unlocked) {
+            const b = BUILDINGS.find(x => x.id === u.building);
+            h += `<button class="recruit" disabled data-tt="${esc('Requiert : ' + (b ? b.name : '?'))}"><span class="r-top"><span class="crest">${ic(ICONS.unit[u.id])}</span><span class="r-name">${esc(u.name)}</span></span><span class="req">${ic('lock-simple')}${esc(b ? b.name : '?')}</span></button>`;
+            return;
         }
+        h += `<button class="recruit" ${canAfford(u.cost) ? '' : 'disabled'} data-tt="${unitTtData(u)}" onclick="recruitUnit('${u.id}')"><span class="r-top"><span class="crest">${ic(ICONS.unit[u.id])}</span><span class="r-name">${esc(u.name)}${u.size > 1 ? ' ×' + u.size : ''}</span></span><span class="r-foot">${costHtml(u.cost)}<span class="r-plus">${ic('plus-circle')}</span></span></button>`;
     });
-    chtml += '</div></div>';
+    return h + '</div>';
+}
 
-    chtml += '<div class="panel recruit-section"><h3>Recruter</h3><div class="recruit-grid">';
-    const available = UNITS.filter(u => u.always || (u.building && isBuilt(u.building)));
-    available.forEach(u => {
-        const aff = canAfford(u.cost) && getArmySize() + u.size <= getArmyCap();
-        const costStr = Object.entries(u.cost).map(([k, v]) => v + RES_META[k].icon).join(' ');
-        chtml += '<div class="recruit-card" data-tt="' + unitTtData(u).replace(/"/g, '&quot;') + '"><span class="rc-icon">' + u.icon + '</span><div class="rc-info"><div class="rc-name">' + u.name + (u.size > 1 ? ' (×' + u.size + ')' : '') + '</div><div class="rc-stats">PV:' + u.hp + ' ATK:' + u.atk + ' DEF:' + u.def + ' SPD:' + u.spd + (u.heals ? ' Regen:' + u.heals : '') + (u.dodge ? ' Esquive:' + (u.dodge * 100) + '%' : '') + '</div><div class="rc-cost">' + costStr + '</div></div><button ' + (aff ? '' : 'disabled') + ' onclick="recruitUnit(\'' + u.id + '\')">+</button></div>';
+function heroesBody() {
+    let h = `<div class="row-sub" style="margin-bottom:14px">Les héros combattent aux côtés de l'armée. Tombés au combat, ils sont blessés pendant 2 tours. Places : <b style="color:var(--gold-hi)">${state.heroes.length} / ${getHeroSlots()}</b></div>`;
+    HEROES.forEach(hero => {
+        const owned = state.heroes.includes(hero.id);
+        const unlocked = hasResearch(hero.research);
+        const stats = statsHtmlUnit(hero);
+        let foot = '';
+        if (owned) {
+            foot = isHeroWounded(hero.id) ? `<span class="tag warn">Blessé · ${state.heroWounded[hero.id]} tour(s)</span>` : '<span class="tag">Prêt au combat</span>';
+        } else if (unlocked) {
+            const full = state.heroes.length >= getHeroSlots();
+            const r = full ? 'Toutes les places de héros sont prises' : blockReason(hero.cost, false);
+            foot = `<button class="btn btn-primary" ${r ? 'disabled' : ''} data-tt="${esc(r)}" onclick="recruitHero('${hero.id}')">Recruter ${costHtml(hero.cost)}</button>`;
+        } else {
+            const r = RESEARCH.find(x => x.id === hero.research);
+            foot = `<span class="req">${ic('lock-simple')}Recherche : ${esc(r ? r.name : hero.research)}</span>`;
+        }
+        h += `<div class="hero-card${owned ? ' owned' : ''}${!owned && !unlocked ? ' locked' : ''}"><div class="hero-portrait">${ic(ICONS.hero[hero.id])}</div><div class="row-main"><div class="row-title">${esc(hero.name)}</div><div class="row-meta">${stats}</div><div class="hero-ability"><b>${esc(hero.abilityName)}</b> · ${esc(hero.abilityDesc)}</div><div class="row-meta">${foot}</div></div></div>`;
     });
-    const locked = UNITS.filter(u => !u.always && (!u.building || !isBuilt(u.building)));
-    locked.forEach(u => {
-        const bName = BUILDINGS.find(b => b.id === u.building);
-        chtml += '<div class="recruit-card" style="opacity:.3"><span class="rc-icon">' + u.icon + '</span><div class="rc-info"><div class="rc-name">' + u.name + '</div><div class="rc-stats" style="color:var(--dim)">Requiert: ' + (bName ? bName.name : '?') + '</div></div>🔒</div>';
-    });
-    chtml += '</div></div>';
+    return h;
+}
 
-    document.getElementById('right-panel').innerHTML = chtml;
+function logBody() {
+    if (!state.log.length) return '<div class="empty">Rien à signaler pour l\'instant.</div>';
+    return '<div class="log-list">' + state.log.slice(-40).map(e => `<div class="log-entry ${e.cls}">${richText(e.text)}</div>`).join('') + '</div>';
+}
+
+function renderNodePanel() {
+    const el = document.getElementById('node-panel');
+    const open = !!selectedNode && centerView === 'map';
+    el.classList.toggle('open', open);
+    if (!open) return;
+    const id = selectedNode;
+    const node = getNode(id);
+    const m = state.map;
+    const st = nodeStatus(id);
+    const owned = st === 'player', allied = st === 'allied';
+    let body = `<p class="np-desc">${esc(node.desc)}</p><div class="np-facts">`;
+    if ((owned || allied) && node.prod && Object.keys(node.prod).length) {
+        body += `<div class="fact">${ic('coins')}<span class="fact-l">Rapporte chaque tour</span>${fxHtml(node.prod)}</div>`;
+    }
+    if (node.cache && !m.cacheLooted[id] && !owned) {
+        body += `<div class="fact">${ic('package')}<span class="fact-l">Cache à piller</span>${fxHtml(node.cache)}</div>`;
+    }
+    const threat = m.threats.filter(t => t.nodeId === id).sort((a, b) => a.arrivesIn - b.arrivesIn)[0];
+    if (threat) {
+        const pv = getForcePreview(threat.budget, threat.seed);
+        body += `<div class="fact threat">${ic('warning-diamond')}<span class="fact-l">Attaque dans ${threat.arrivesIn} tour(s)</span>${forceHtml(pv)}</div>`;
+    }
+    if (!owned && !allied) {
+        const pv = getForcePreview(garrisonBudgetFor(node), seedFor(id) + state.turn);
+        body += `<div class="fact">${ic('shield-warning')}<span class="fact-l">Garnison estimée</span>${forceHtml(pv)}</div>`;
+    }
+    if (owned) {
+        const g = m.garrisons[id] || [];
+        body += `<div class="fact">${ic('users-three')}<span class="fact-l">Garnison</span><span class="force">${g.length ? g.length + ' unité(s)' : '<span style="color:var(--danger)">aucune</span>'}</span></div>`;
+    }
+    if (node.type === 'home') {
+        body += `<button class="btn btn-ghost btn-block" style="margin-top:2px" onclick="setCenterView('base')">${ic('sign-in')}Entrer dans le dôme</button>`;
+    }
+    if (m.armyAt === id && !m.armyDest) {
+        body += `<div class="fact">${ic('flag-banner')}<span class="fact-l">Votre armée stationne ici</span><button class="btn btn-ghost" style="min-height:28px;padding:0 10px" onclick="toggleDrawer('army')">Gérer</button></div>`;
+    }
+    body += '</div><div class="np-actions">';
+    const linked = m.armyAt ? linkTurns(m.armyAt, id) : null;
+    const canMarch = linked && !m.armyDest;
+    const noArmy = !state.army.length;
+    const action = (icon, label, fn, reason, extra = '') => `<button class="btn btn-primary" ${reason ? 'disabled' : ''} data-tt="${esc(reason)}" onclick="${fn}"><span class="lbl">${ic(icon)}${label}</span><span class="cost">${extra}${cmdChip()}</span></button>`;
+    if (owned && !m.fortified[id]) {
+        body += action('wall', 'Fortifier', `fortifyNode('${id}')`, blockReason(null, true), '<span>+3 DEF</span>');
+    } else if (owned && m.fortified[id]) {
+        body += `<div class="fact">${ic('wall')}<span class="fact-l">Fortifié : +3 DEF au prochain combat</span></div>`;
+    }
+    if (node.type === 'city' && m.owner[id] === 'neutral' && !allied) {
+        const r = blockReason(null, true) || ((state.resources.influence || 0) < node.allyCost ? 'Influence insuffisante' : '');
+        body += action('handshake', 'Proposer une alliance', `allyCity('${id}')`, r, `<span class="${(state.resources.influence || 0) < node.allyCost ? 'short' : ''}">${resIcon('influence')}${node.allyCost}</span>`);
+    }
+    if ((st === 'hostile' || (node.type === 'city' && st === 'neutral')) && canMarch) {
+        body += action('sword', 'Lancer l\'assaut', `attackNode('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`);
+    }
+    if ((owned || allied) && canMarch && m.armyAt !== id) {
+        body += action('path', 'Déplacer l\'armée ici', `moveArmy('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`);
+    }
+    body += '</div>';
+    if (m.armyDest) body += `<div class="np-hint">${ic('info')}L'armée est en marche, aucun nouvel ordre possible.</div>`;
+    else if (m.armyAt && m.armyAt !== id && !linked) body += `<div class="np-hint">${ic('info')}Aucune route directe depuis ${esc(getNode(m.armyAt).name)}.</div>`;
+    else if (linked) body += `<div class="np-hint">${ic('path')}À ${linked} tour(s) de marche de votre armée.</div>`;
+
+    el.style.setProperty('--st', `var(--st-${st})`);
+    el.innerHTML = `<div class="np-banner"><span class="np-glyph">${ic(ICONS.node[node.type])}</span><span class="flag">${STATUS_LABEL[st]}</span><h2>${esc(node.name)}</h2><div class="eyebrow" style="color:var(--text-2)">${TYPE_LABEL[node.type]}</div><button class="dr-close" style="position:absolute;top:14px;right:14px" onclick="closeNodePanel()" aria-label="Fermer">${ic('x')}</button></div><div class="dr-body">${body}</div>`;
+}
+
+function forceHtml(preview) {
+    return '<span class="force">' + preview.map(e => `<span>${e.count} ${esc(e.name)}</span>`).join('') + '</span>';
+}
+
+function renderThreats() {
+    const list = [...state.map.threats].sort((a, b) => a.arrivesIn - b.arrivesIn);
+    document.getElementById('threats').innerHTML = list.map(t => {
+        const n = getNode(t.nodeId);
+        const units = getForcePreview(t.budget, t.seed).reduce((s, e) => s + e.count, 0);
+        return `<button class="threat-card${t.arrivesIn <= 1 ? ' imminent' : ''}" onclick="focusThreat('${t.nodeId}')" data-tt="${esc('Voir ' + n.name)}"><span class="t-eta"><span>${t.arrivesIn}</span></span><span><span class="t-name">${esc(n.name)}</span><br><span class="t-sub">${units} assaillants · ${t.arrivesIn > 1 ? 'dans ' + t.arrivesIn + ' tours' : 'au prochain tour'}</span></span></button>`;
+    }).join('');
+}
+
+function renderEndTurn() {
+    const b = document.getElementById('btn-endturn');
+    b.classList.toggle('ready', state.command === 0);
+    b.innerHTML = `<span class="et-inner">${ic('sun-horizon')}<span class="et-label">Fin du tour</span><span class="et-num">${state.turn} → ${state.turn + 1}</span></span>`;
+}
+
+function toast(text, kind = '') {
+    const box = document.getElementById('toasts');
+    if (!box) return;
+    const t = document.createElement('div');
+    t.className = 'toast ' + kind;
+    t.innerHTML = ic(ICONS.toast[kind] || 'info') + '<span>' + richText(text) + '</span>';
+    box.appendChild(t);
+    while (box.children.length > 3) box.firstChild.remove();
+    setTimeout(() => {
+        t.classList.add('out');
+        setTimeout(() => t.remove(), 400);
+    }, 3200);
 }
 
 function renderBattle() {
     if (!battleState) return;
+    if (window.Map3D) Map3D.stop();
+    if (window.Base3D) Base3D.stop();
+    gt.el && gt.el.classList.remove('visible');
+    const sum = (list, k) => list.reduce((s, u) => s + Math.max(0, u[k]), 0);
+    const bar = (cls, label, list) => {
+        const hp = sum(list, 'hp'), max = sum(list, 'maxHp') || 1;
+        const alive = list.filter(u => u.hp > 0).length;
+        return `<div class="force-bar ${cls}"><div class="fb-head"><span>${label}</span><b>${alive} / ${list.length}</b></div><div class="fb-track"><div class="fb-fill" style="width:${hp / max * 100}%"></div></div></div>`;
+    };
+    document.getElementById('battle-top').innerHTML = bar('ally', 'Vos forces', battleState.player)
+        + `<div id="battle-round" class="plate"><small>Round</small>${battleState.round || '—'}</div>`
+        + bar('enemy', 'Ennemis', battleState.enemy);
+    const blog = document.getElementById('blog');
+    blog.innerHTML = battleState.log.slice(-30).map(e => `<div class="bl-entry ${e.type}">${richText(e.text)}</div>`).join('');
+    blog.scrollTop = blog.scrollHeight;
     if (battleState.mode === '3d') {
-        renderBattle3D();
+        setStageView('battle3d-view');
         return;
     }
-    if (window.Base3D) Base3D.stop();
-    if (window.Map3D) Map3D.stop();
-    document.getElementById('right-panel').innerHTML = '';
-    const cp = document.getElementById('center-panel');
-    let html = '<div class="battlefield"><div class="bf-side">';
-    battleState.player.forEach(u => {
-        html += unitCardHtml(u);
-    });
-    html += '</div><div class="bf-center">ROUND ' + battleState.round + '</div><div class="bf-side">';
-    battleState.enemy.forEach(u => {
-        html += unitCardHtml(u);
-    });
-    html += '</div></div><div class="battle-log" id="blog">';
-    battleState.log.slice(-20).forEach(e => {
-        html += '<div class="bl-entry ' + e.type + '">' + e.text + '</div>';
-    });
-    html += '</div>';
-    cp.innerHTML = html;
-    const blog = document.getElementById('blog');
-    if (blog) blog.scrollTop = blog.scrollHeight;
-
-    const lp = document.getElementById('left-panel');
-    lp.innerHTML = '<div class="panel"><h3>Combat en cours</h3><div style="font-size:.8rem;color:var(--dim);padding:8px">Vague ' + state.turn + ' / Round ' + battleState.round + '</div></div>';
-}
-
-function renderBattle3D() {
-    const cp = document.getElementById('center-panel');
-    if (!document.getElementById('battle3d-wrap')) {
-        if (window.Base3D) Base3D.stop();
-        if (window.Map3D) Map3D.stop();
-        cp.innerHTML = '<div id="battle3d-wrap"><div id="battle3d-view"></div><div id="b3d-round"></div></div>';
-        document.getElementById('right-panel').innerHTML = '<div class="panel log-section"><h3>Combat</h3><div class="battle-log" id="blog"></div></div>';
-    }
-    document.getElementById('b3d-round').textContent = 'ROUND ' + battleState.round;
-    const blog = document.getElementById('blog');
-    blog.innerHTML = battleState.log.slice(-20).map(e => '<div class="bl-entry ' + e.type + '">' + e.text + '</div>').join('');
-    blog.scrollTop = blog.scrollHeight;
-
-    const lp = document.getElementById('left-panel');
-    lp.innerHTML = '<div class="panel"><h3>Combat en cours</h3><div style="font-size:.8rem;color:var(--dim);padding:8px">Vague ' + state.turn + ' / Round ' + battleState.round + '</div></div>';
+    setStageView('battle2d');
+    document.getElementById('battle2d').innerHTML = '<div class="bf-side">' + battleState.player.map(unitCardHtml).join('') + '</div><div></div><div class="bf-side">' + battleState.enemy.map(unitCardHtml).join('') + '</div>';
 }
 
 function unitCardHtml(u) {
     const pct = u.maxHp > 0 ? Math.max(0, u.hp / u.maxHp * 100) : 0;
     const hpCls = pct > 50 ? '' : pct > 25 ? 'mid' : 'low';
-    return '<div class="unit-card' + (u.hp <= 0 ? ' dead' : '') + '" data-uid="' + u.uid + '"><div class="uc-top"><span class="uc-icon">' + u.icon + '</span><span class="uc-name">' + u.name + '</span><span class="uc-hp-text">' + Math.max(0, u.hp) + '/' + u.maxHp + '</span></div><div class="hp-bar"><div class="hp-fill ' + hpCls + '" style="width:' + pct + '%"></div></div><div class="uc-stats">ATK:' + u.atk + ' DEF:' + u.def + ' SPD:' + u.spd + '</div></div>';
+    return `<div class="unit-card${u.hp <= 0 ? ' dead' : ''}" data-uid="${u.uid}"><div class="uc-top"><span>${esc(u.name)}</span><span>${Math.max(0, u.hp)}/${u.maxHp}</span></div><div class="hp-bar"><div class="hp-fill ${hpCls}" style="width:${pct}%"></div></div><div class="uc-stats">ATK ${u.atk} · DEF ${u.def} · VIT ${u.spd}</div></div>`;
 }
 
 function toggleResearch() {
     const overlay = document.getElementById('research-overlay');
     overlay.classList.toggle('active');
     if (overlay.classList.contains('active')) renderResearch();
+    guideUpdate();
 }
 
 function renderResearch() {
@@ -410,48 +548,40 @@ function renderResearch() {
     overlay.onclick = e => {
         if (e.target === overlay) toggleResearch();
     };
-
-    const branchOrder = ['DOCTRINE', 'GUERRE', 'SINGULARITE'];
-    let cols = '';
-    branchOrder.forEach(bk => {
+    const cols = ['DOCTRINE', 'GUERRE', 'SINGULARITE'].map(bk => {
         const meta = RESEARCH_BRANCHES[bk];
         const items = RESEARCH.filter(r => r.branch === bk).sort((a, b) => a.tier - b.tier);
-        let colHtml = '<div class="rs-branch" style="--bc:' + meta.color + '">'
-            + '<div class="rs-branch-head"><span>' + meta.icon + ' ' + meta.name + '</span><div class="rs-desc">' + meta.desc + '</div></div>';
-        let lastTier = 0;
-        items.forEach(r => {
-            if (r.tier !== lastTier) {
-                lastTier = r.tier;
-                colHtml += '<div class="rs-tier-label">TIER ' + r.tier + (r.tier > state.core ? ' <span style="color:var(--danger)">· Cœur ' + r.tier + ' requis</span>' : '') + '</div>';
-            }
-            const done = hasResearch(r.id);
-            const costStr = Object.entries(r.cost).map(([k, v]) => v + RES_META[k].icon).join(' ');
-            let cls = 'rs-item', right;
-            if (done) {
-                cls += ' rs-done';
-                right = '<div class="rs-cost">✓</div>';
-            } else if (canResearch(r)) {
-                right = '<div class="rs-cost">' + costStr + '</div><button ' + (canAfford(r.cost) && state.command >= 1 ? '' : 'disabled') + ' data-tt="1 CMD" onclick="doResearch(\'' + r.id + '\')">Rechercher</button>';
-            } else {
-                cls += ' rs-locked';
-                let reason;
-                if (r.tier > state.core) {
-                    reason = 'Cœur niv.' + r.tier + ' requis';
+        let col = `<div class="rs-branch" style="--bc:${BRANCH_COLOR[bk]}"><div class="rs-branch-head"><div class="crest">${ic(ICONS.branch[bk])}</div><div><h3>${esc(meta.name)}</h3><p>${esc(meta.desc)}</p></div></div>`;
+        [1, 2, 3].forEach(tier => {
+            const tierItems = items.filter(r => r.tier === tier);
+            if (!tierItems.length) return;
+            const open = tier <= state.core;
+            col += `<div class="rs-tier${open ? ' open' : ''}">PALIER ${['', 'I', 'II', 'III'][tier]}${open ? '' : `<span class="tag warn">Cœur ${tier} requis</span>`}</div><div class="rs-nodes">`;
+            tierItems.forEach(r => {
+                const done = hasResearch(r.id);
+                let cls = 'rs-item', foot;
+                if (done) {
+                    cls += ' done';
+                    foot = '<span class="tag">Acquis</span>';
+                } else if (canResearch(r)) {
+                    cls += ' avail';
+                    const reason = blockReason(r.cost, true);
+                    foot = `${costHtml(r.cost)}<button class="btn btn-primary" ${reason ? 'disabled' : ''} data-tt="${esc(reason)}" onclick="doResearch('${r.id}')">Étudier ${cmdChip()}</button>`;
                 } else {
-                    const missing = r.requires.find(id => !hasResearch(id));
-                    const mr = RESEARCH.find(x => x.id === missing);
-                    reason = mr ? 'Requiert : ' + mr.name : 'Indisponible';
+                    cls += ' locked';
+                    let reason;
+                    if (r.tier > state.core) reason = 'Cœur niveau ' + r.tier + ' requis';
+                    else {
+                        const mr = RESEARCH.find(x => x.id === r.requires.find(id => !hasResearch(id)));
+                        reason = mr ? 'Après : ' + mr.name : 'Indisponible';
+                    }
+                    foot = `<span class="req">${ic('lock-simple')}${esc(reason)}</span>${costHtml(r.cost)}`;
                 }
-                right = '<div class="rs-cost">' + reason + '</div>';
-            }
-            colHtml += '<div class="' + cls + '"><div class="rs-name">' + r.icon + ' ' + r.name + '</div><div class="rs-desc">' + r.desc + '</div>' + right + '</div>';
+                col += `<div class="${cls}"><div class="rs-name"><span>${esc(r.name)}</span>${done ? `<span class="done-mark">${ic('seal-check')}</span>` : ''}</div><div class="rs-desc">${richText(r.desc)}</div><div class="rs-foot">${foot}</div></div>`;
+            });
+            col += '</div>';
         });
-        colHtml += '</div>';
-        cols += colHtml;
-    });
-
-    overlay.innerHTML = '<div id="research-modal">'
-        + '<div class="rs-head"><h2>🧠 Cortex de PROMETHEUS</h2><span>Cœur niveau ' + state.core + ' — les tiers supérieurs exigent un Cœur amélioré</span><button class="rs-close" onclick="toggleResearch()">✕</button></div>'
-        + '<div class="rs-cols">' + cols + '</div>'
-        + '</div>';
+        return col + '</div>';
+    }).join('');
+    overlay.innerHTML = `<div id="research-modal" class="plate"><div class="dr-head"><div><div class="eyebrow">Savoir · Cœur niveau ${state.core}</div><h2>Cortex de PROMETHEUS</h2></div><button class="dr-close" onclick="toggleResearch()" aria-label="Fermer">${ic('x')}</button></div><div class="rs-cols">${cols}</div></div>`;
 }

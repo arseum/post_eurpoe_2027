@@ -4,20 +4,20 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 
 const UNIT3D = {
-    sentinelle: { tint: 0x38bdf8, scale: 0.6 },
-    mech: { tint: 0x0ea5e9, scale: 0.8 },
-    drone: { tint: 0x22d3ee, scale: 0.45 },
-    biosoldat: { tint: 0x22c55e, scale: 0.62 },
-    agent: { tint: 0xa855f7, scale: 0.55 },
-    titanUnit: { tint: 0xe2e8f0, scale: 1.0 },
-    pillard: { tint: 0xef4444, scale: 0.55 },
-    eclaireur: { tint: 0xf97316, scale: 0.5 },
-    blinde: { tint: 0x991b1b, scale: 0.78 },
-    commandant: { tint: 0xf59e0b, scale: 0.7 },
-    destroyer: { tint: 0x7f1d1d, scale: 0.95 },
-    valkyrie: { tint: 0xfacc15, scale: 0.85 },
-    oracle: { tint: 0x34d399, scale: 0.72 },
-    avatar: { tint: 0xc084fc, scale: 0.8 }
+    sentinelle: { tint: 0x4fb3b0, scale: 0.6 },
+    mech: { tint: 0x3d8a96, scale: 0.8 },
+    drone: { tint: 0x6fd6cf, scale: 0.45 },
+    biosoldat: { tint: 0x6fae7e, scale: 0.62 },
+    agent: { tint: 0x8f7fbf, scale: 0.55 },
+    titanUnit: { tint: 0xd8d2c0, scale: 1.0 },
+    pillard: { tint: 0xb5483c, scale: 0.55 },
+    eclaireur: { tint: 0xc87a3c, scale: 0.5 },
+    blinde: { tint: 0x7d2c24, scale: 0.78 },
+    commandant: { tint: 0xa8553a, scale: 0.7 },
+    destroyer: { tint: 0x5e1f1a, scale: 0.95 },
+    valkyrie: { tint: 0xe0c27a, scale: 0.85 },
+    oracle: { tint: 0x7fd0a8, scale: 0.72 },
+    avatar: { tint: 0xb79be0, scale: 0.8 }
 };
 
 let modelGltf = null;
@@ -88,33 +88,33 @@ function buildScene() {
     clock = new THREE.Clock();
     scene = new THREE.Scene();
     scene.background = null;
-    scene.fog = new THREE.FogExp2(0x0a0e1a, 0.028);
+    scene.fog = new THREE.FogExp2(0x04080f, 0.03);
 
-    const hemi = new THREE.HemisphereLight(0x8fb8ff, 0x0a0e1a, 0.9);
+    const hemi = new THREE.HemisphereLight(0x9ab8d8, 0x101820, 0.85);
     scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 1.4);
+    const dir = new THREE.DirectionalLight(0xfff1dc, 1.6);
     dir.position.set(5, 10, 4);
     scene.add(dir);
 
     const groundGeo = new THREE.CircleGeometry(11, 48);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x101728, roughness: 1 });
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 1 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     scene.add(ground);
 
-    const grid = new THREE.GridHelper(22, 22, 0x1e3a5f, 0x16233d);
+    const grid = new THREE.GridHelper(22, 22, 0x463714, 0x1f1c15);
     grid.position.y = 0.01;
     scene.add(grid);
 
     const ringPlayerGeo = new THREE.RingGeometry(1.4, 1.9, 32);
-    const ringPlayerMat = new THREE.MeshBasicMaterial({ color: 0x0e7490, transparent: true, opacity: 0.35 });
+    const ringPlayerMat = new THREE.MeshBasicMaterial({ color: 0x0a7e78, transparent: true, opacity: 0.4 });
     const ringPlayer = new THREE.Mesh(ringPlayerGeo, ringPlayerMat);
     ringPlayer.rotation.x = -Math.PI / 2;
     ringPlayer.position.set(-3, 0.015, 0);
     scene.add(ringPlayer);
 
     const ringEnemyGeo = new THREE.RingGeometry(1.4, 1.9, 32);
-    const ringEnemyMat = new THREE.MeshBasicMaterial({ color: 0x7f1d1d, transparent: true, opacity: 0.35 });
+    const ringEnemyMat = new THREE.MeshBasicMaterial({ color: 0x7a2a24, transparent: true, opacity: 0.4 });
     const ringEnemy = new THREE.Mesh(ringEnemyGeo, ringEnemyMat);
     ringEnemy.rotation.x = -Math.PI / 2;
     ringEnemy.position.set(3, 0.015, 0);
@@ -219,14 +219,14 @@ function disposeUnits() {
 }
 
 function colorFor(side, frontline) {
-    if (side === 'player') return frontline ? 0x38bdf8 : 0x22d3ee;
-    return frontline ? 0xef4444 : 0xf97316;
+    if (side === 'player') return frontline ? 0x4fb3b0 : 0x6fd6cf;
+    return frontline ? 0xb5483c : 0xc87a3c;
 }
 
 function makeLabelEl(u) {
     const div = document.createElement('div');
     div.className = 'b3d-label';
-    div.innerHTML = `<div class="b3d-name">${u.icon || ''} ${u.name || ''}</div><div class="hp-bar"><div class="hp-fill"></div></div><div class="b3d-hp-text">${u.hp}/${u.maxHp}</div>`;
+    div.innerHTML = `<div class="b3d-name">${u.name || ''}</div><div class="hp-bar"><div class="hp-fill"></div></div><div class="b3d-hp-text">${u.hp}/${u.maxHp}</div>`;
     return div;
 }
 
@@ -249,7 +249,7 @@ function placeUnits(list, side) {
 }
 
 function createModelUnit(u, side, x, z) {
-    const cfg = UNIT3D[u.id] || { tint: side === 'player' ? 0x38bdf8 : 0xef4444, scale: 0.6 };
+    const cfg = UNIT3D[u.id] || { tint: side === 'player' ? 0x4fb3b0 : 0xb5483c, scale: 0.6 };
     const group = new THREE.Group();
     group.position.set(x, 0, z);
     group.rotation.y = side === 'player' ? Math.PI / 2 : -Math.PI / 2;

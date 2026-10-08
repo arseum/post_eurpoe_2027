@@ -4,65 +4,123 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Post-Europe 2147</title>
-    <link rel="stylesheet" href="style.css?v=43">
+    <meta name="description" content="Campagne stratégique au tour par tour : libérez l'Europe depuis le dôme d'Alpha-7.">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='6' y='6' width='20' height='20' transform='rotate(45 16 16)' fill='%230a1424' stroke='%23c8aa6e' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='4' fill='%230ac8b9'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=Marcellus+SC&display=swap">
+    <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css">
+    <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
+    <link rel="stylesheet" href="style.css?v=45">
     <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
     </script>
 </head>
 <body>
-<div id="app">
-    <div id="title-screen" class="screen active">
-        <h1>POST-EUROPE<span>2147</span></h1>
-        <p class="subtitle">Auto-Battler stratégique sous le dôme</p>
-        <p id="version-label" style="font-size:.7rem;color:var(--dim);letter-spacing:.2em;margin-top:-16px"></p>
-        <p style="max-width:500px;color:var(--dim);font-size:.85rem;line-height:1.6;padding:0 16px">L'Europe est en
-            ruines. Dirigez Alpha-7, construisez votre armée et repoussez 30 vagues d'envahisseurs guidé par l'IA
-            PROMETHEUS.</p>
+<div id="title-screen" class="screen active">
+    <div id="title-map"></div>
+    <div id="title-veil"></div>
+    <main class="title-block">
+        <div class="eyebrow">Europe · An 2147</div>
+        <h1>Post-Europe<span>2147</span></h1>
+        <p class="pitch">Sous le dôme d'Alpha-7, PROMETHEUS s'éveille. Rallie ou soumets les cités libres, brise les verrous d'Hegemonia et marche sur Berlin.</p>
         <div class="menu-buttons">
-            <button onclick="newGame()">NOUVELLE PARTIE</button>
-            <button id="btn-continue" onclick="continueGame()">CONTINUER</button>
+            <button class="btn btn-primary" onclick="newGame()"><i class="ph-duotone ph-flag-banner"></i>Nouvelle campagne</button>
+            <button class="btn btn-ghost" id="btn-continue" onclick="continueGame()">Continuer</button>
         </div>
+        <button id="opt-guide" class="switch on" role="switch" aria-checked="true" onclick="toggleGuideOption()">
+            <span class="sw-track"><span class="sw-knob"></span></span>
+            <span class="sw-label"><b>Guide de PROMETHEUS</b><small>Vous accompagne pendant les premiers tours</small></span>
+        </button>
+    </main>
+    <div class="version-tag" id="version-label"></div>
+</div>
+
+<div id="game-screen" class="screen">
+    <div id="stage">
+        <div id="map3d-view" class="stage-view"></div>
+        <div id="base3d-view" class="stage-view"></div>
+        <div id="battle3d-view" class="stage-view"></div>
+        <div id="battle2d" class="stage-view"></div>
     </div>
-    <div id="game-screen" class="screen">
-        <div id="resource-bar"></div>
-        <div id="main-area">
-            <div id="left-panel"></div>
-            <div id="center-panel"></div>
-            <div id="right-panel"></div>
+    <div id="vignette"></div>
+
+    <header id="hud-top" class="hud">
+        <div id="res-plates"></div>
+        <div id="turn-cartouche"></div>
+        <div id="cmd" class="build-only"></div>
+    </header>
+
+    <nav id="rail" class="hud build-only" aria-label="Royaume">
+        <button class="rail-btn" data-drawer="dome" onclick="toggleDrawer('dome')"><i class="ph-duotone ph-castle-turret"></i><span>Dôme</span></button>
+        <button class="rail-btn" data-drawer="army" onclick="toggleDrawer('army')"><i class="ph-duotone ph-shield"></i><span>Armée</span></button>
+        <button class="rail-btn" data-drawer="heroes" onclick="toggleDrawer('heroes')"><i class="ph-duotone ph-star-four"></i><span>Héros</span></button>
+        <button class="rail-btn" id="btn-research" onclick="toggleResearch()"><i class="ph-duotone ph-atom"></i><span>Savoir</span></button>
+        <div class="rail-sep"></div>
+        <button class="rail-btn" data-drawer="log" onclick="toggleDrawer('log')"><i class="ph-duotone ph-scroll"></i><span>Journal</span></button>
+        <button class="rail-btn" id="btn-guide" onclick="toggleGuide()"><i class="ph-duotone ph-question"></i><span>Guide</span></button>
+    </nav>
+
+    <aside id="drawer" class="drawer plate hud build-only"></aside>
+    <aside id="node-panel" class="drawer plate hud build-only"></aside>
+
+    <div id="threats" class="hud build-only"></div>
+
+    <div id="view-switch" class="hud build-only">
+        <button id="vs-map" onclick="setCenterView('map')"><i class="ph-duotone ph-map-trifold"></i>Europe</button>
+        <button id="vs-base" onclick="setCenterView('base')"><i class="ph-duotone ph-castle-turret"></i>Alpha-7</button>
+    </div>
+
+    <button id="btn-endturn" class="hud build-only" onclick="endTurn()" aria-label="Fin du tour"></button>
+
+    <div id="battle-hud" class="hud">
+        <div id="battle-top"></div>
+        <div id="battle-log-wrap" class="plate">
+            <div class="sec-label">Rapport de bataille</div>
+            <div class="battle-log" id="blog"></div>
         </div>
-        <div id="bottom-bar">
-            <button id="btn-endturn" onclick="endTurn()">FIN DE TOUR ▶</button>
-            <button id="btn-research" onclick="toggleResearch()">🧠 RECHERCHE</button>
+        <div id="speed">
             <button class="speed-btn" id="spd1" onclick="setSpeed(1)">×1</button>
             <button class="speed-btn" id="spd2" onclick="setSpeed(2)">×2</button>
             <button class="speed-btn" id="spd3" onclick="setSpeed(3)">×3</button>
-            <span id="game-version-label" style="position:absolute;right:16px;font-size:.65rem;color:var(--dim);letter-spacing:.15em"></span>
         </div>
     </div>
-    <div id="g-tooltip"></div>
-    <div id="event-overlay" class="overlay"></div>
-    <div id="chapter-overlay" class="overlay"></div>
-    <div id="research-overlay" class="overlay"></div>
-    <div id="phase-fade"></div>
-    <div id="end-screen" class="screen">
-        <div id="end-content"></div>
-    </div>
+
+    <div id="toasts"></div>
+    <span id="game-version-label" hidden></span>
 </div>
-<script type="module" src="js/scene3d.js?v=43"></script>
-<script type="module" src="js/base3d.js?v=43"></script>
-<script type="module" src="js/map3d.js?v=43"></script>
-<script type="module" src="js/fx3d.js?v=43"></script>
-<script src="js/version.js?v=43"></script>
-<script src="js/data.js?v=43"></script>
-<script src="js/game.js?v=43"></script>
-<script src="js/render.js?v=43"></script>
+
+<div id="guide-card" class="plate" aria-live="polite"></div>
+<div id="guide-ring"></div>
+<div id="g-tooltip"></div>
+<div id="event-overlay" class="overlay"></div>
+<div id="chapter-overlay" class="overlay"></div>
+<div id="research-overlay" class="overlay"></div>
+<div id="phase-fade"></div>
+<div id="end-screen" class="screen">
+    <div id="end-content" class="plate"></div>
+</div>
+
+<script type="module" src="js/scene3d.js?v=45"></script>
+<script type="module" src="js/base3d.js?v=45"></script>
+<script type="module" src="js/map3d.js?v=45"></script>
+<script type="module" src="js/fx3d.js?v=45"></script>
+<script src="js/version.js?v=45"></script>
+<script src="js/geo-europe.js?v=45"></script>
+<script src="js/data.js?v=45"></script>
+<script src="js/game.js?v=45"></script>
+<script src="js/render.js?v=45"></script>
+<script src="js/guide.js?v=45"></script>
 <script>
     initTooltip();
+    initKeys();
     const _v = typeof VERSION !== 'undefined' ? VERSION : 'dev';
     document.getElementById('version-label').textContent = 'v' + _v;
     document.getElementById('game-version-label').textContent = 'v' + _v;
     setSpeed(1);
     checkContinue();
+    guideOptionInit();
+    document.addEventListener('DOMContentLoaded', mountTitleMap);
 </script>
 </body>
 </html>

@@ -37,7 +37,8 @@ function defaultState() {
         flags: {},
         log: [],
         eventsSeen: [],
-        phase: 'build'
+        phase: 'build',
+        guide: newGuide(false)
     };
 }
 
@@ -63,6 +64,7 @@ function loadSave() {
         if (!state.research) state.research = [];
         if (!state.heroes) state.heroes = [];
         if (!state.heroWounded) state.heroWounded = {};
+        if (!state.guide) state.guide = newGuide(false);
         if (!state.map) {
             state.map = makeMap();
             state.turn = state.wave || 1;
@@ -178,6 +180,11 @@ function isBuilt(id) {
 
 function addLog(t, c = '') {
     state.log.push({text: t, cls: c});
+    if (state.phase === 'build' && !endTurnBusy && typeof toast === 'function') toast(t, c);
+}
+
+function pulseNode(id, color) {
+    if (window.Map3D && Map3D.pulse) Map3D.pulse(id, color);
 }
 
 function clampRes() {
@@ -636,7 +643,7 @@ function showResult(won) {
     return new Promise(resolve => {
         const div = document.createElement('div');
         div.className = 'result-overlay ' + (won ? 'win' : 'lose');
-        div.innerHTML = '<h2>' + (won ? 'VICTOIRE' : 'DÉFAITE') + '</h2>';
+        div.innerHTML = '<div class="ro-band"><h2>' + (won ? 'Victoire' : 'Défaite') + '</h2></div>';
         document.body.appendChild(div);
         setTimeout(() => {
             div.remove();
@@ -724,6 +731,7 @@ function departArmy(dest, isAttack) {
     addLog((isAttack ? '⚔️ Assaut lancé sur ' : '🚚 Armée en route vers ') + node.name + ' — ' + t + ' tour(s)', isAttack ? 'warning' : '');
     save();
     render();
+    pulseNode(dest, isAttack ? 0xc8473c : 0x0ac8b9);
 }
 
 function moveArmy(dest) {
@@ -745,6 +753,7 @@ function allyCity(id) {
     addLog('🤝 Alliance scellée avec ' + node.name, 'chapter');
     save();
     render();
+    pulseNode(id, 0x5fb37e);
 }
 
 function fortifyNode(id) {
@@ -755,6 +764,7 @@ function fortifyNode(id) {
     addLog('🧱 ' + getNode(id).name + ' fortifié — +3 DEF au prochain combat', 'build');
     save();
     render();
+    pulseNode(id, 0xc8aa6e);
 }
 
 function getChapterFromMap() {
@@ -1020,8 +1030,14 @@ async function endTurn() {
     state.phase = 'build';
     save();
     render();
-    processNext();
     endTurnBusy = false;
+    toast('Tour ' + state.turn + ' · production ' + fmtProd(prod), '');
+    const fresh = m.lastThreatTurn === state.turn - 1 ? m.threats[m.threats.length - 1] : null;
+    if (fresh) {
+        toast('Menace détectée sur ' + getNode(fresh.nodeId).name, 'warning');
+        pulseNode(fresh.nodeId, 0xc8473c);
+    }
+    processNext();
 }
 
 function fmtProd(p) {
@@ -1042,14 +1058,15 @@ function processNext() {
     const s = pendingScreens.shift();
     if (s.type === 'chapter') showChapter(s.chapter);
     else if (s.type === 'event') showEvent(s.event);
+    guideUpdate();
 }
 
 function showEvent(evt) {
     const ov = document.getElementById('event-overlay');
     const avail = evt.choices.filter(c => !c.requires || c.requires(state));
-    let html = '<div id="event-modal"><h2>' + evt.title + '</h2><div class="event-text" id="evt-text"></div><div class="event-choices" id="evt-ch" style="display:none">';
+    let html = '<div id="event-modal" class="plate"><div class="eyebrow">' + (evt.id.startsWith('ms_') ? 'Jalon' : 'Événement') + ' · Tour ' + state.turn + '</div><h2>' + evt.title + '</h2><div class="rule"></div><div class="event-text" id="evt-text"></div><div class="event-choices" id="evt-ch" style="display:none">';
     avail.forEach((c, i) => {
-        html += '<button onclick="onEvtChoice(' + i + ')">' + c.text + '<span class="choice-effect">' + c.effect + '</span></button>';
+        html += '<button class="choice" onclick="onEvtChoice(' + i + ')"><span>' + richText(c.text) + '</span>' + (c.effects ? fxHtml(c.effects) : '<span class="fx">' + richText(c.effect || '') + '</span>') + '</button>';
     });
     html += '</div></div>';
     ov.innerHTML = html;
@@ -1123,7 +1140,7 @@ function finishTw() {
 function showChapter(ch) {
     const info = CHAPTERS[ch - 1];
     const ov = document.getElementById('chapter-overlay');
-    ov.innerHTML = '<div class="chapter-box"><div class="ch-label">CHAPITRE ' + info.num + '</div><h2>' + info.name + '</h2><div class="ch-sub">' + info.sub + '</div><p>' + info.desc + '</p><button onclick="dismissCh()">CONTINUER</button></div>';
+    ov.innerHTML = '<div class="chapter-box plate"><div class="eyebrow">Chapitre</div><div class="ch-num">' + ['', 'I', 'II', 'III'][info.num] + '</div><h2>' + info.name.charAt(0) + info.name.slice(1).toLowerCase() + '</h2><div class="ch-sub">' + info.sub + '</div><div class="rule"></div><p>' + info.desc + '</p><button class="btn btn-primary" onclick="dismissCh()">Continuer</button></div>';
     ov.classList.add('active');
     addLog('═══ Chapitre ' + info.num + ' : ' + info.name + ' ═══', 'chapter');
 }
@@ -1131,11 +1148,12 @@ function showChapter(ch) {
 function dismissCh() {
     document.getElementById('chapter-overlay').classList.remove('active');
     processNext();
+    guideUpdate();
 }
 
 function showDefeat(type) {
     const d = DEFEATS[type];
-    document.getElementById('end-content').innerHTML = '<div class="defeat"><h1>' + d.icon + ' ' + d.title + '</h1></div><div class="end-sub">DÉFAITE — Vague ' + state.turn + '</div><div class="end-text">' + d.text + '</div>' + statsHtml() + '<button onclick="backToTitle()">RETOUR AU MENU</button>';
+    document.getElementById('end-content').innerHTML = '<div class="defeat"><h1>' + d.title + '</h1></div><div class="end-sub">Défaite · Tour ' + state.turn + '</div><div class="rule"></div><div class="end-text">' + d.text + '</div>' + statsHtml() + '<button class="btn btn-primary" onclick="backToTitle()">Retour au menu</button>';
     showScreen('end-screen');
     deleteSave();
 }
@@ -1143,9 +1161,9 @@ function showDefeat(type) {
 function triggerEnding() {
     const avail = [];
     for (const [id, e] of Object.entries(ENDINGS)) if (e.check(state)) avail.push({id, ...e});
-    let html = '<h1>Le Destin d\'Alpha-7</h1><div class="end-sub">VAGUE 30 — LE CHOIX FINAL</div><p style="color:var(--dim);margin-bottom:24px;line-height:1.6">Vos actions ont ouvert les voies suivantes :</p><div class="ending-choices">';
+    let html = '<h1>Le Destin d\'Alpha-7</h1><div class="end-sub">Berlin est tombée · Le choix final</div><p style="color:var(--dim);margin-bottom:24px;line-height:1.6">Vos actions ont ouvert les voies suivantes :</p><div class="ending-choices">';
     avail.forEach(e => {
-        html += '<button onclick="selectEnd(\'' + e.id + '\')"><h3>' + e.icon + ' ' + e.title + '</h3><p>' + e.sub + '</p></button>';
+        html += '<button onclick="selectEnd(\'' + e.id + '\')"><h3>' + e.title + '</h3><p>' + e.sub + '</p></button>';
     });
     html += '</div>';
     document.getElementById('end-content').innerHTML = html;
@@ -1155,7 +1173,7 @@ function triggerEnding() {
 function selectEnd(id) {
     const e = ENDINGS[id];
     const isCap = id === 'capitulation';
-    document.getElementById('end-content').innerHTML = (isCap ? '<div class="defeat">' : '') + '<h1>' + e.icon + ' ' + e.title + '</h1>' + (isCap ? '</div>' : '') + '<div class="end-sub">' + (isCap ? 'DÉFAITE' : 'VICTOIRE') + '</div><div class="end-text">' + e.text + '</div>' + statsHtml() + '<button onclick="backToTitle()">RETOUR AU MENU</button>';
+    document.getElementById('end-content').innerHTML = (isCap ? '<div class="defeat">' : '') + '<h1>' + e.title + '</h1>' + (isCap ? '</div>' : '') + '<div class="end-sub">' + (isCap ? 'Défaite' : 'Victoire') + '</div><div class="rule"></div><div class="end-text">' + e.text + '</div>' + statsHtml() + '<button class="btn btn-primary" onclick="backToTitle()">Retour au menu</button>';
     deleteSave();
 }
 
@@ -1167,15 +1185,17 @@ function backToTitle() {
     deleteSave();
     showScreen('title-screen');
     checkContinue();
+    mountTitleMap();
 }
 
 function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
+    guideUpdate();
 }
 
 function checkContinue() {
-    document.getElementById('btn-continue').style.display = hasSave() ? 'block' : 'none';
+    document.getElementById('btn-continue').style.display = hasSave() ? '' : 'none';
 }
 
 function setSpeed(s) {
@@ -1184,9 +1204,19 @@ function setSpeed(s) {
     document.getElementById('spd' + s).classList.add('active');
 }
 
+function resetView() {
+    selectedNode = null;
+    openDrawer = null;
+    centerView = 'map';
+    lastCommand = null;
+    lastResources = null;
+}
+
 function newGame() {
     deleteSave();
     state = defaultState();
+    state.guide = newGuide(guidePref());
+    resetView();
     showScreen('game-screen');
     save();
     render();
@@ -1200,6 +1230,7 @@ function newGame() {
 
 function continueGame() {
     if (!loadSave()) return;
+    resetView();
     showScreen('game-screen');
     render();
 }

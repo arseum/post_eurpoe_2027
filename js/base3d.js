@@ -48,27 +48,27 @@ function easeOutBack(t) {
 function buildScene() {
     scene = new THREE.Scene();
     scene.background = null;
-    scene.fog = new THREE.FogExp2(0x0a0e1a, 0.02);
+    scene.fog = new THREE.FogExp2(0x04080f, 0.022);
 
-    const hemi = new THREE.HemisphereLight(0x8fb8ff, 0x0a0e1a, 0.9);
+    const hemi = new THREE.HemisphereLight(0x9ab8d8, 0x101820, 0.85);
     scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 1.3);
+    const dir = new THREE.DirectionalLight(0xfff1dc, 1.6);
     dir.position.set(6, 12, 5);
     scene.add(dir);
 
     const groundGeo = new THREE.CircleGeometry(14, 56);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x101728, roughness: 1 });
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x17191c, roughness: 1 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     scene.add(ground);
 
-    const grid = new THREE.GridHelper(26, 26, 0x1e3a5f, 0x16233d);
+    const grid = new THREE.GridHelper(26, 26, 0x463714, 0x1f1c15);
     grid.position.y = 0.01;
     scene.add(grid);
 
     const domeGeo = new THREE.SphereGeometry(13.5, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2);
     const domeMat = new THREE.MeshBasicMaterial({
-        color: 0x38bdf8,
+        color: 0x9fd8e0,
         transparent: true,
         opacity: 0.05,
         side: THREE.BackSide,
@@ -78,9 +78,9 @@ function buildScene() {
     scene.add(dome);
 
     const domeWireMat = new THREE.MeshBasicMaterial({
-        color: 0x38bdf8,
+        color: 0xc8aa6e,
         transparent: true,
-        opacity: 0.06,
+        opacity: 0.07,
         wireframe: true,
         depthWrite: false
     });
@@ -97,12 +97,12 @@ function buildScene() {
 function buildHq() {
     const group = new THREE.Group();
 
-    const baseMat = new THREE.MeshStandardMaterial({ color: 0x16233d, roughness: 0.6, metalness: 0.25 });
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0x5a4422, roughness: 0.4, metalness: 0.8 });
     const base = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2, 0.3, 6), baseMat);
     base.position.y = 0.15;
     group.add(base);
 
-    const towerMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.6, metalness: 0.3 });
+    const towerMat = new THREE.MeshStandardMaterial({ color: 0x262a30, roughness: 0.55, metalness: 0.6 });
     const tower = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.4, 3, 6), towerMat);
     tower.position.y = 1.8;
     group.add(tower);
@@ -111,8 +111,8 @@ function buildHq() {
         color: 0x1e293b,
         roughness: 0.5,
         metalness: 0.3,
-        emissive: new THREE.Color(0x00d4ff),
-        emissiveIntensity: 1.2
+        emissive: new THREE.Color(0x0ac8b9),
+        emissiveIntensity: 1.6
     });
     const top = new THREE.Mesh(new THREE.SphereGeometry(0.35), topMat);
     top.position.y = 3.6;
@@ -182,7 +182,7 @@ function buildSlots() {
         const z = Math.sin(angle) * SLOT_RADIUS;
 
         const diskGeo = new THREE.CircleGeometry(1.1, 24);
-        const diskMat = new THREE.MeshBasicMaterial({ color: 0x1e3a5f, transparent: true, opacity: 0.18 });
+        const diskMat = new THREE.MeshBasicMaterial({ color: 0xc8aa6e, transparent: true, opacity: 0.1 });
         const disk = new THREE.Mesh(diskGeo, diskMat);
         disk.rotation.x = -Math.PI / 2;
         disk.position.set(x, 0.02, z);
@@ -193,13 +193,13 @@ function buildSlots() {
 }
 
 function makeBase() {
-    const mat = new THREE.MeshStandardMaterial({ color: 0x16233d, roughness: 0.6, metalness: 0.25 });
+    const mat = new THREE.MeshStandardMaterial({ color: 0x4a3920, roughness: 0.45, metalness: 0.75 });
     return new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.4, 0.15, 24), mat);
 }
 
 function bodyMat(color, roughness, metalness) {
     return new THREE.MeshStandardMaterial({
-        color: color !== undefined ? color : 0x1e293b,
+        color: color !== undefined ? color : 0x2a2e34,
         roughness: roughness !== undefined ? roughness : 0.6,
         metalness: metalness !== undefined ? metalness : 0.25
     });
