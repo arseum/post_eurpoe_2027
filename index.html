@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=Marcellus+SC&display=swap">
     <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css">
     <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
-    <link rel="stylesheet" href="style.css?v=46">
+    <link rel="stylesheet" href="style.css?v=50">
     <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
     </script>
@@ -29,6 +29,7 @@
             <button class="btn btn-primary" id="btn-new" onclick="askNewGame()"><i class="ph-duotone ph-flag-banner"></i>Nouvelle campagne</button>
         </div>
         <div id="save-info"></div>
+        <div class="title-opt"><span class="eyebrow">Difficulté</span><div class="seg" id="opt-diff"></div><small id="opt-diff-desc"></small></div>
         <button id="opt-guide" class="switch on" role="switch" aria-checked="true" onclick="toggleGuideOption()">
             <span class="sw-track"><span class="sw-knob"></span></span>
             <span class="sw-label"><b>Guide de PROMETHEUS</b><small>Vous accompagne pendant les premiers tours</small></span>
@@ -61,6 +62,7 @@
         <div class="rail-sep"></div>
         <button class="rail-btn" data-drawer="log" onclick="toggleDrawer('log')"><i class="ph-duotone ph-scroll"></i><span>Journal</span></button>
         <button class="rail-btn" id="btn-guide" onclick="toggleGuide()"><i class="ph-duotone ph-question"></i><span>Guide</span></button>
+        <button class="rail-btn" id="btn-sound" onclick="toggleSound()"><i class="ph-duotone ph-speaker-high"></i><span>Son</span></button>
     </nav>
 
     <aside id="drawer" class="drawer plate hud build-only"></aside>
@@ -104,16 +106,17 @@
     <div id="end-content" class="plate"></div>
 </div>
 
-<script type="module" src="js/scene3d.js?v=46"></script>
-<script type="module" src="js/base3d.js?v=46"></script>
-<script type="module" src="js/map3d.js?v=46"></script>
-<script type="module" src="js/fx3d.js?v=46"></script>
-<script src="js/version.js?v=46"></script>
-<script src="js/geo-europe.js?v=46"></script>
-<script src="js/data.js?v=46"></script>
-<script src="js/game.js?v=46"></script>
-<script src="js/render.js?v=46"></script>
-<script src="js/guide.js?v=46"></script>
+<script type="module" src="js/scene3d.js?v=50"></script>
+<script type="module" src="js/base3d.js?v=50"></script>
+<script type="module" src="js/map3d.js?v=50"></script>
+<script type="module" src="js/fx3d.js?v=50"></script>
+<script src="js/version.js?v=50"></script>
+<script src="js/geo-europe.js?v=50"></script>
+<script src="js/audio.js?v=50"></script>
+<script src="js/data.js?v=50"></script>
+<script src="js/game.js?v=50"></script>
+<script src="js/render.js?v=50"></script>
+<script src="js/guide.js?v=50"></script>
 <script>
     initTooltip();
     initKeys();
@@ -123,6 +126,8 @@
     setSpeed(1);
     checkContinue();
     guideOptionInit();
+    difficultyInit();
+    soundInit();
     document.addEventListener('DOMContentLoaded', mountTitleMap);
 </script>
 </body>

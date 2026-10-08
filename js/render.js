@@ -105,7 +105,7 @@ function positionTooltip(el) {
 function initKeys() {
     document.addEventListener('keydown', e => {
         if (e.key !== 'Escape') return;
-        if (document.getElementById('confirm-overlay').classList.contains('active')) return closeConfirm();
+        if (document.getElementById('confirm-overlay').classList.contains('active')) return assaultPlan ? closeAssault() : closeConfirm();
         const rs = document.getElementById('research-overlay');
         if (rs.classList.contains('active')) return toggleResearch();
         if (openDrawer) return toggleDrawer(openDrawer);
@@ -136,10 +136,11 @@ function renderTop() {
     let html = '';
     for (const [k, meta] of Object.entries(RES_META)) {
         const v = state.resources[k];
-        const p = prod[k] + (k === 'stability' ? (v > 40 ? -1 : v < 40 ? 1 : 0) : 0);
+        const p = prod[k] + (k === 'stability' ? stabilityDrift() : 0);
         const critical = k === 'stability' && v <= 20;
         if (lastResources && lastResources[k] !== v) bumped.push(k);
-        const body = `Réserve <span>${v} / ${meta.max}</span><br>Par tour <span>${p >= 0 ? '+' : ''}${p}</span>` + (critical ? '<br><span style="color:var(--danger)">Stabilité critique : risque de révolte</span>' : '');
+        const upkeep = k === 'energy' ? getUpkeep() : 0;
+        const body = `Réserve <span>${v} / ${meta.max}</span><br>Par tour <span>${p >= 0 ? '+' : ''}${p}</span>` + (upkeep ? `<br>Dont entretien des unités <span>−${upkeep}</span>` : '') + (critical ? '<br><span style="color:var(--danger)">Stabilité critique : risque de révolte</span>' : '');
         html += `<div class="res${critical ? ' critical' : ''}${bumped.includes(k) ? ' bump' : ''}" data-tt="${tt(meta.label, body)}">${resIcon(k)}<span class="res-val">${v}</span><span class="res-prod${p < 0 ? ' neg' : ''}">${p >= 0 ? '+' : ''}${p}</span></div>`;
     }
     lastResources = {...state.resources};
@@ -304,7 +305,7 @@ function domeBody() {
     let h = `<button class="btn btn-ghost btn-block enter-dome" onclick="setCenterView('${centerView === 'base' ? 'map' : 'base'}')">${ic(centerView === 'base' ? 'map-trifold' : 'sign-in')}${centerView === 'base' ? 'Retour à la carte' : 'Entrer dans le dôme'}</button>`;
     h += '<div class="sec-label">Cœur de PROMETHEUS</div>';
     const reason = coreCost ? blockReason(coreCost, true) : '';
-    h += `<div class="core-card"><div class="core-gem"><span>${['', 'I', 'II', 'III'][state.core]}</span></div><div class="core-info"><div class="row-title">Niveau ${state.core} sur 3</div><div class="row-sub">Chaque niveau ajoute 2 places à l'armée et ouvre un palier de recherche.</div></div>`
+    h += `<div class="core-card"><div class="core-gem"><span>${['', 'I', 'II', 'III'][state.core]}</span></div><div class="core-info"><div class="row-title">Niveau ${state.core} sur 3</div><div class="row-sub">Chaque niveau ajoute ${BALANCE.armyCapPerCore} places à l'armée et ouvre un palier de recherche.</div></div>`
         + (coreCost
             ? `<button class="btn btn-primary btn-block" ${reason ? 'disabled' : ''} data-tt="${esc(reason)}" onclick="upgradeCore()">${ic('arrow-up')}Éveiller ${costHtml(coreCost)}</button>`
             : '<span class="tag">Éveil complet</span>')
@@ -361,7 +362,7 @@ function armyBody() {
         if (!g.length) h += '<div class="empty">Garnison vide. Ce lieu tombera s\'il est attaqué sans armée.</div>';
         g.forEach((id, i) => {
             const u = UNITS.find(x => x.id === id);
-            h += `<div class="row" data-tt="${unitTtData(u)}"><div class="crest">${ic(ICONS.unit[u.id])}</div><div class="row-main"><div class="row-title">${esc(u.name)}</div><div class="row-meta">${statsHtmlUnit(u)}</div></div><button class="btn btn-ghost btn-icon" data-tt="${esc(transferTt)}" onclick="transferToArmy(${i})" aria-label="Vers l'armée">${ic('arrow-up')}</button></div>`;
+            h += `<div class="row" data-tt="${unitTtData(u)}"><div class="crest">${ic(ICONS.unit[u.id])}</div><div class="row-main"><div class="row-title">${esc(u.name)}</div><div class="row-meta">${statsHtmlUnit(u)}</div></div><button class="btn btn-ghost btn-icon" data-tt="${esc(transferTt)}" onclick="transferToArmy(${i})" aria-label="Vers l'armée">${ic('arrow-up')}</button><button class="btn btn-ghost btn-icon" data-tt="Libérer l'unité (supprime son entretien)" onclick="dismissGarrison('${m.armyAt}', ${i})" aria-label="Libérer">${ic('x')}</button></div>`;
         });
     }
     const atHome = m.armyAt === 'alpha7' && !m.armyDest;
@@ -381,7 +382,7 @@ function armyBody() {
 }
 
 function heroesBody() {
-    let h = `<div class="row-sub" style="margin-bottom:14px">Les héros combattent aux côtés de l'armée. Tombés au combat, ils sont blessés pendant 2 tours. Places : <b style="color:var(--gold-hi)">${state.heroes.length} / ${getHeroSlots()}</b></div>`;
+    let h = `<div class="row-sub" style="margin-bottom:14px">Les héros combattent aux côtés de l'armée. Tombés au combat, ils sont blessés pendant ${BALANCE.heroWoundTurns} tours. Places : <b style="color:var(--gold-hi)">${state.heroes.length} / ${getHeroSlots()}</b></div>`;
     HEROES.forEach(hero => {
         const owned = state.heroes.includes(hero.id);
         const unlocked = hasResearch(hero.research);
@@ -430,14 +431,18 @@ function renderNodePanel() {
         body += `<div class="fact threat">${ic('warning-diamond')}<span class="fact-l">Attaque dans ${threat.arrivesIn} tour(s)</span>${forceHtml(pv)}</div>`;
     }
     if (!owned && !allied) {
-        const pv = getForcePreview(garrisonBudgetFor(node), seedFor(id) + state.turn);
+        const pv = getForcePreview(garrisonBudgetFor(node), garrisonSeed(id));
         body += `<div class="fact">${ic('shield-warning')}<span class="fact-l">Garnison estimée</span>${forceHtml(pv)}</div>`;
+        if (m.fallenAllies && m.fallenAllies[id]) body += `<div class="fact">${ic('handshake')}<span class="fact-l">Ancienne alliée occupée : la reprendre la libère et renoue l'alliance</span></div>`;
     }
     if (owned) {
         const g = m.garrisons[id] || [];
         body += `<div class="fact">${ic('users-three')}<span class="fact-l">Garnison</span><span class="force">${g.length ? g.length + ' unité(s)' : '<span style="color:var(--danger)">aucune</span>'}</span></div>`;
     }
     if (node.type === 'home') {
+        const decs = Object.entries(DECISIONS).filter(([f, d]) => state.flags[f] && d.desc);
+        body += `<div class="fact">${ic('brain')}<span class="fact-l">Confiance en PROMETHEUS</span><span class="force">${iaTrust(state)}/6</span></div>`;
+        decs.forEach(([, d]) => body += `<div class="fact">${ic('seal-check')}<span class="fact-l">${richText(d.desc)}</span></div>`);
         body += `<button class="btn btn-ghost btn-block" style="margin-top:2px" onclick="setCenterView('base')">${ic('sign-in')}Entrer dans le dôme</button>`;
     }
     if (m.armyAt === id && !m.armyDest) {
@@ -449,16 +454,16 @@ function renderNodePanel() {
     const noArmy = !state.army.length;
     const action = (icon, label, fn, reason, extra = '') => `<button class="btn btn-primary" ${reason ? 'disabled' : ''} data-tt="${esc(reason)}" onclick="${fn}"><span class="lbl">${ic(icon)}${label}</span><span class="cost">${extra}${cmdChip()}</span></button>`;
     if (owned && !m.fortified[id]) {
-        body += action('wall', 'Fortifier', `fortifyNode('${id}')`, blockReason(null, true), '<span>+3 DEF</span>');
+        body += action('wall', 'Fortifier', `fortifyNode('${id}')`, blockReason(null, true), '<span>+' + BALANCE.fortifyDef + ' DEF</span>');
     } else if (owned && m.fortified[id]) {
-        body += `<div class="fact">${ic('wall')}<span class="fact-l">Fortifié : +3 DEF au prochain combat</span></div>`;
+        body += `<div class="fact">${ic('wall')}<span class="fact-l">Fortifié : +${BALANCE.fortifyDef} DEF au prochain combat</span></div>`;
     }
     if (node.type === 'city' && m.owner[id] === 'neutral' && !allied) {
-        const r = blockReason(null, true) || ((state.resources.influence || 0) < node.allyCost ? 'Influence insuffisante' : '');
-        body += action('handshake', 'Proposer une alliance', `allyCity('${id}')`, r, `<span class="${(state.resources.influence || 0) < node.allyCost ? 'short' : ''}">${resIcon('influence')}${node.allyCost}</span>`);
+        const r = blockReason(null, true) || ((state.resources.influence || 0) < getAllyCost(node) ? 'Influence insuffisante' : '');
+        body += action('handshake', 'Proposer une alliance', `allyCity('${id}')`, r, `<span class="${(state.resources.influence || 0) < getAllyCost(node) ? 'short' : ''}">${resIcon('influence')}${getAllyCost(node)}</span>`);
     }
     if ((st === 'hostile' || (node.type === 'city' && st === 'neutral')) && canMarch) {
-        body += action('sword', 'Lancer l\'assaut', `attackNode('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`);
+        body += action('sword', 'Préparer l\'assaut', `openAssault('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`);
     }
     if ((owned || allied) && canMarch && m.armyAt !== id) {
         body += action('path', 'Déplacer l\'armée ici', `moveArmy('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`);
@@ -472,6 +477,89 @@ function renderNodePanel() {
     el.innerHTML = `<div class="np-banner"><span class="np-glyph">${ic(ICONS.node[node.type])}</span><span class="flag">${STATUS_LABEL[st]}</span><h2>${esc(node.name)}</h2><div class="eyebrow" style="color:var(--text-2)">${TYPE_LABEL[node.type]}</div><button class="dr-close" style="position:absolute;top:14px;right:14px" onclick="closeNodePanel()" aria-label="Fermer">${ic('x')}</button></div><div class="dr-body">${body}</div>`;
 }
 
+const RETREAT_OPTIONS = [[0, 'Jusqu\'au bout', 'Le combat continue jusqu\'au dernier soldat'], [0.35, 'Prudent', 'Repli quand l\'armée perd 65 % de ses PV'], [0.6, 'Très prudent', 'Repli dès 40 % de PV perdus']];
+let assaultPlan = null;
+const oddsCache = new Map();
+
+function oddsPct(x) {
+    return Math.round(x * 100) + ' %';
+}
+
+function oddsClass(x) {
+    return x >= 0.75 ? 'good' : x >= 0.4 ? 'mid' : 'bad';
+}
+
+function openAssault(id) {
+    assaultPlan = {dest: id, leave: new Set()};
+    renderAssault();
+    const ov = document.getElementById('confirm-overlay');
+    ov.onclick = e => {
+        if (e.target === ov) closeAssault();
+    };
+    ov.classList.add('active');
+}
+
+function closeAssault() {
+    assaultPlan = null;
+    closeConfirm();
+}
+
+function toggleEngage(i) {
+    if (!assaultPlan) return;
+    if (assaultPlan.leave.has(i)) assaultPlan.leave.delete(i);
+    else if (assaultPlan.leave.size < state.army.length - 1) assaultPlan.leave.add(i);
+    renderAssault();
+}
+
+function pickRetreat(v) {
+    setRetreat(v);
+    renderAssault();
+}
+
+function launchAssault() {
+    if (!assaultPlan) return;
+    const plan = assaultPlan;
+    closeAssault();
+    attackNode(plan.dest, [...plan.leave]);
+}
+
+function renderAssault() {
+    const ov = document.getElementById('confirm-overlay');
+    const m = state.map, node = getNode(assaultPlan.dest);
+    const eta = linkTurns(m.armyAt, node.id);
+    const canLeave = m.owner[m.armyAt] === 'player';
+    const engaged = state.army.filter((_, i) => !assaultPlan.leave.has(i));
+    const defenders = generateForce(garrisonBudgetFor(node, state.turn + eta), garrisonSeed(node.id));
+    const est = estimateBattle(assaultUnits(node.id, engaged), defenders, BALANCE.estimateRuns, {retreatAt: state.retreatAt});
+    const lose = Math.max(0, 1 - est.win - est.retreat);
+    const rows = state.army.map((id, i) => {
+        const u = UNITS.find(x => x.id === id);
+        const on = !assaultPlan.leave.has(i);
+        const btn = canLeave ? `<button class="btn btn-ghost engage${on ? ' on' : ''}" onclick="toggleEngage(${i})">${on ? ic('sword') + 'Engagée' : ic('shield') + 'Reste'}</button>` : '';
+        return `<div class="row${on ? '' : ' off'}"><div class="crest">${ic(ICONS.unit[u.id])}</div><div class="row-main"><div class="row-title">${esc(u.name)}</div><div class="row-meta">${statsHtmlUnit(u)}</div></div>${btn}</div>`;
+    }).join('');
+    const heroes = buildHeroUnits().map(h => `<span class="tag">${esc(h.name)}</span>`).join(' ');
+    const seg = RETREAT_OPTIONS.map(([v, l, tt]) => `<button class="speed-btn${state.retreatAt === v ? ' active' : ''}" data-tt="${esc(tt)}" onclick="pickRetreat(${v})">${l}</button>`).join('');
+    ov.innerHTML = `<div class="confirm-box assault-box plate" role="dialog" aria-labelledby="as-title"><div class="eyebrow">Préparer l'assaut · arrivée dans ${eta} tour(s)</div><h2 id="as-title">${esc(node.name)}</h2><div class="rule"></div>`
+        + `<div class="odds"><div class="odd ${oddsClass(est.win)}"><b>${oddsPct(est.win)}</b><span>Victoire</span></div><div class="odd"><b>${oddsPct(est.retreat)}</b><span>Repli</span></div><div class="odd ${lose > 0.25 ? 'bad' : ''}"><b>${oddsPct(lose)}</b><span>Armée perdue</span></div></div>`
+        + `<div class="fact">${ic('shield-warning')}<span class="fact-l">Garnison à l'arrivée</span>${forceHtml(getForcePreview(garrisonBudgetFor(node, state.turn + eta), garrisonSeed(node.id)))}</div>`
+        + `<div class="sec-label">Unités engagées<span class="count">${engaged.length} / ${state.army.length}</span></div>${canLeave ? '' : `<div class="np-hint">${ic('info')}Hors d'un territoire à vous, toute l'armée marche.</div>`}<div class="assault-units">${rows}</div>`
+        + (heroes ? `<div class="fact">${ic('star-four')}<span class="fact-l">Héros présents</span>${heroes}</div>` : '')
+        + `<div class="sec-label">Consigne de repli</div><div class="seg">${seg}</div>`
+        + `<div class="confirm-actions"><button class="btn btn-ghost" onclick="closeAssault()">Annuler</button><button class="btn btn-primary" onclick="launchAssault()" ${state.command < 1 ? 'disabled' : ''}>${ic('sword')}Lancer l'assaut ${cmdChip()}</button></div></div>`;
+}
+
+function defenseOdds(t) {
+    const units = defenseUnits(t.nodeId);
+    if (!units.length) return 0;
+    const key = [state.turn, t.nodeId, t.seed, t.budget, state.retreatAt, JSON.stringify(units.map(u => [u.id, u.hp, u.atk, u.def]))].join('|');
+    if (!oddsCache.has(key)) {
+        if (oddsCache.size > 50) oddsCache.clear();
+        oddsCache.set(key, estimateBattle(units, generateForce(t.budget, t.seed), 60).win);
+    }
+    return oddsCache.get(key);
+}
+
 function forceHtml(preview) {
     return '<span class="force">' + preview.map(e => `<span>${e.count} ${esc(e.name)}</span>`).join('') + '</span>';
 }
@@ -481,7 +569,10 @@ function renderThreats() {
     document.getElementById('threats').innerHTML = list.map(t => {
         const n = getNode(t.nodeId);
         const units = getForcePreview(t.budget, t.seed).reduce((s, e) => s + e.count, 0);
-        return `<button class="threat-card${t.arrivesIn <= 1 ? ' imminent' : ''}" onclick="focusThreat('${t.nodeId}')" data-tt="${esc('Voir ' + n.name)}"><span class="t-eta"><span>${t.arrivesIn}</span></span><span><span class="t-name">${esc(n.name)}</span><br><span class="t-sub">${units} assaillants · ${t.arrivesIn > 1 ? 'dans ' + t.arrivesIn + ' tours' : 'au prochain tour'}</span></span></button>`;
+        const own = state.map.owner[t.nodeId] === 'player';
+        const odds = own ? defenseOdds(t) : null;
+        const oddsTxt = own ? ` · <span class="odds-inline ${oddsClass(odds)}">${odds ? oddsPct(odds) + ' de tenir' : 'sans défense'}</span>` : '';
+        return `<button class="threat-card${t.arrivesIn <= 1 ? ' imminent' : ''}" onclick="focusThreat('${t.nodeId}')" data-tt="${esc('Voir ' + n.name + (own ? ' — chances estimées avec la garnison actuelle' : ''))}"><span class="t-eta"><span>${t.arrivesIn}</span></span><span><span class="t-name">${esc(n.name)}</span><br><span class="t-sub">${units} assaillants · ${t.arrivesIn > 1 ? 'dans ' + t.arrivesIn + ' tours' : 'au prochain tour'}${oddsTxt}</span></span></button>`;
     }).join('');
 }
 
@@ -639,4 +730,48 @@ function flashSaved() {
     el.classList.add('show');
     clearTimeout(savedTimer);
     savedTimer = setTimeout(() => el.classList.remove('show'), 1600);
+}
+
+const DIFF_KEY = 'pe2147_diff';
+
+function difficultyPref() {
+    try {
+        const v = localStorage.getItem(DIFF_KEY);
+        return DIFFICULTIES[v] ? v : 'normal';
+    } catch (e) {
+        return 'normal';
+    }
+}
+
+function difficultyInit() {
+    const el = document.getElementById('opt-diff');
+    if (!el) return;
+    const cur = difficultyPref();
+    el.innerHTML = Object.entries(DIFFICULTIES).map(([k, d]) => `<button class="speed-btn${k === cur ? ' active' : ''}" onclick="pickDifficulty('${k}')">${d.label}</button>`).join('');
+    document.getElementById('opt-diff-desc').textContent = DIFFICULTIES[cur].desc;
+}
+
+function pickDifficulty(k) {
+    try {
+        localStorage.setItem(DIFF_KEY, k);
+    } catch (e) {
+        return;
+    }
+    difficultyInit();
+    Sfx.play('click');
+}
+
+function soundInit() {
+    const b = document.getElementById('btn-sound');
+    if (!b) return;
+    const on = Sfx.isOn();
+    b.classList.toggle('muted', !on);
+    b.querySelector('i').className = 'ph-duotone ' + (on ? 'ph-speaker-high' : 'ph-speaker-slash');
+    b.setAttribute('data-tt', on ? 'Couper le son' : 'Activer le son');
+}
+
+function toggleSound() {
+    Sfx.toggle();
+    soundInit();
+    Sfx.play('click');
 }

@@ -13,31 +13,38 @@ function makeMap() {
         threats: [],
         cacheLooted: {},
         lost: {},
-        lastThreatTurn: 2,
+        lastThreatTurn: 0,
         berlinWeakened: 0,
         transferTurn: 0
     };
+}
+
+function newStats() {
+    return {assaultsWon: 0, assaultsLost: 0, retreats: 0, defensesWon: 0, defensesLost: 0, unitsLost: 0, recruited: 0};
 }
 
 function defaultState() {
     return {
         version: 2,
         turn: 1,
-        command: 3,
+        command: BALANCE.commandBase,
         map: makeMap(),
         chapter: 1,
-        resources: {energy: 25, materials: 20, data: 10, stability: 50, influence: 5},
+        resources: {energy: BALANCE.startEnergy, materials: BALANCE.startMaterials, data: BALANCE.startData, stability: BALANCE.startStability, influence: BALANCE.startInfluence},
         buildings: [],
         buildingLevels: {},
         core: 1,
         research: [],
         heroes: [],
         heroWounded: {},
-        army: ['sentinelle', 'sentinelle', 'sentinelle'],
+        army: [...BALANCE.startArmy],
         flags: {},
+        seed: Math.floor(Math.random() * 1e6),
+        retreatAt: BALANCE.retreatDefault,
         log: [],
         eventsSeen: [],
         phase: 'build',
+        stats: newStats(),
         guide: newGuide(false)
     };
 }
@@ -68,6 +75,8 @@ function loadSave() {
     try {
         state = JSON.parse(localStorage.getItem('pe2147'));
         if (!state) return false;
+        if (!DIFFICULTIES[state.difficulty]) state.difficulty = 'normal';
+        applyDifficulty(state.difficulty);
         if (!state.buildingLevels) state.buildingLevels = {};
         for (const id of state.buildings) if (!state.buildingLevels[id]) state.buildingLevels[id] = 1;
         if (!state.core) state.core = 1;
@@ -75,9 +84,12 @@ function loadSave() {
         if (!state.heroes) state.heroes = [];
         if (!state.heroWounded) state.heroWounded = {};
         if (!state.guide) state.guide = newGuide(false);
+        if (!state.stats) state.stats = newStats();
+        if (state.seed === undefined) state.seed = 0;
+        if (state.retreatAt === undefined) state.retreatAt = BALANCE.retreatDefault;
         if (!state.map) {
             state.map = makeMap();
-            state.turn = state.wave || 1;
+            state.turn = state.turn || 1;
             state.command = getCommandMax();
             state.version = 2;
         }
@@ -96,11 +108,11 @@ function loadSave() {
 }
 
 function getArmyCap() {
-    return 5 + (state.buildings.includes('quartiers') ? 2 + getBuildingLevel('quartiers') : 0) + (state.core - 1) * 2 + researchEffects().armyCap;
+    return BALANCE.armyCapBase + (isBuilt('quartiers') ? BALANCE.quartiersCapBase + getBuildingLevel('quartiers') * BALANCE.quartiersCapPerLevel : 0) + (state.core - 1) * BALANCE.armyCapPerCore + activeEffects().armyCap;
 }
 
 function getCommandMax() {
-    return 3 + researchEffects().command;
+    return BALANCE.commandBase + activeEffects().command;
 }
 
 function spendCommand(n) {
@@ -129,9 +141,9 @@ function getBuildingLevel(id) {
 function getUpgradeCost(id) {
     const b = BUILDINGS.find(x => x.id === id);
     const lvl = getBuildingLevel(id);
-    if (!b || lvl < 1 || lvl >= 3) return null;
+    if (!b || lvl < 1 || lvl >= BALANCE.maxBuildingLevel) return null;
     const cost = {};
-    for (const [k, v] of Object.entries(b.cost)) cost[k] = Math.round(v * lvl * 1.5);
+    for (const [k, v] of Object.entries(b.cost)) cost[k] = Math.round(v * lvl * BALANCE.upgradeCostMult);
     return cost;
 }
 
@@ -143,6 +155,7 @@ function upgradeBuilding(id) {
     for (const [k, v] of Object.entries(cost)) state.resources[k] -= v;
     state.buildingLevels[id]++;
     addLog('⬆ ' + b.icon + ' ' + b.name + ' → niveau ' + state.buildingLevels[id], 'build');
+    sfx('build');
     save();
     render();
 }
@@ -157,26 +170,30 @@ function upgradeCore() {
     if (!spendCommand(1)) return;
     for (const [k, v] of Object.entries(cost)) state.resources[k] -= v;
     state.core++;
-    addLog('◆ Cœur d\'Alpha-7 → niveau ' + state.core + ' (+2 armée max)', 'chapter');
+    addLog('◆ Cœur d\'Alpha-7 → niveau ' + state.core + ' (+' + BALANCE.armyCapPerCore + ' armée max)', 'chapter');
+    sfx('build');
     save();
     render();
 }
 
 function getArmySize() {
-    return state.army.reduce((s, id) => {
-        const u = UNITS.find(x => x.id === id);
-        return s + (u ? u.size : 1);
-    }, 0);
+    return sizeOf(state.army);
 }
 
 function getProduction() {
-    const p = {energy: 5, materials: 3, data: 2, stability: 0, influence: 0};
+    const p = {energy: BALANCE.baseEnergy, materials: BALANCE.baseMaterials, data: BALANCE.baseData, stability: BALANCE.baseStability, influence: BALANCE.baseInfluence};
     for (const bid of state.buildings) {
         const b = BUILDINGS.find(x => x.id === bid);
         if (b && b.prod) for (const [k, v] of Object.entries(b.prod)) p[k] += v * getBuildingLevel(bid);
     }
-    for (const [k, v] of Object.entries(researchEffects().prod)) p[k] += v;
+    for (const [k, v] of Object.entries(activeEffects().prod)) p[k] += v;
     return p;
+}
+
+function stabilityDrift() {
+    const d = BALANCE.stabilityAnchor - state.resources.stability;
+    if (d >= 0) return Math.min(d, BALANCE.stabilityDrift);
+    return -Math.max(Math.min(-d, BALANCE.stabilityDrift), Math.round(-d * BALANCE.stabilityDecayRate));
 }
 
 function canAfford(cost) {
@@ -186,6 +203,18 @@ function canAfford(cost) {
 
 function isBuilt(id) {
     return state.buildings.includes(id);
+}
+
+function sfx(name) {
+    if (typeof Sfx !== 'undefined') Sfx.play(name);
+}
+
+function battleSfx(ev) {
+    if (ev.t === 'attack') sfx(ev.kill ? 'kill' : 'hit');
+    else if (ev.t === 'ability' && ev.kind === 'cleave') sfx(ev.kill || ev.kill2 ? 'kill' : 'hit');
+    else if (ev.t === 'ability') sfx('research');
+    else if (ev.t === 'roundEnd' && ev.heals.length) sfx('heal');
+    else if (ev.t === 'retreat') sfx('retreat');
 }
 
 function addLog(t, c = '') {
@@ -209,6 +238,10 @@ function seededRng(seed) {
     };
 }
 
+function garrisonSeed(id) {
+    return seedFor(id) + state.seed;
+}
+
 function seedFor(nodeId) {
     let s = 0;
     for (const c of nodeId) s = s * 31 + c.charCodeAt(0);
@@ -218,8 +251,8 @@ function seedFor(nodeId) {
 function generateForce(budget, seed) {
     const wn = Math.max(1, Math.round((budget - 5) / 3));
     const rng = seededRng(seed);
-    const mult = 1 + (wn - 1) * 0.06;
-    const avail = ENEMY_TYPES.filter(e => e.minWave <= wn);
+    const mult = 1 + (wn - 1) * BALANCE.enemyScalePerWave;
+    const avail = ENEMY_TYPES.filter(e => e.minTier <= wn);
     const units = [];
     let rem = budget, idx = 0;
     while (rem > 0) {
@@ -271,23 +304,22 @@ function hasResearch(id) {
     return state.research.includes(id);
 }
 
-function researchEffects() {
-    const agg = {prod: {}, mods: {atk: 0, def: 0}, armyCap: 0, hpBonus: 0, command: 0, threatWarning: 0, heroSlot: 0};
+function addEffect(agg, e) {
+    if (e.prod) for (const [k, v] of Object.entries(e.prod)) agg.prod[k] = (agg.prod[k] || 0) + v;
+    if (e.mods) {
+        agg.mods.atk += e.mods.atk || 0;
+        agg.mods.def += e.mods.def || 0;
+    }
+    for (const k of ['armyCap', 'hpBonus', 'command', 'threatWarning', 'heroSlot', 'allyDiscount', 'homeDef', 'capitalWeaken', 'alliedHold']) agg[k] += e[k] || 0;
+}
+
+function activeEffects() {
+    const agg = {prod: {}, mods: {atk: 0, def: 0}, armyCap: 0, hpBonus: 0, command: 0, threatWarning: 0, heroSlot: 0, allyDiscount: 0, homeDef: 0, capitalWeaken: 0, alliedHold: 0};
     for (const rid of state.research) {
         const r = RESEARCH.find(x => x.id === rid);
-        if (!r) continue;
-        const e = r.effect;
-        if (e.prod) for (const [k, v] of Object.entries(e.prod)) agg.prod[k] = (agg.prod[k] || 0) + v;
-        if (e.mods) {
-            agg.mods.atk += e.mods.atk || 0;
-            agg.mods.def += e.mods.def || 0;
-        }
-        agg.armyCap += e.armyCap || 0;
-        agg.hpBonus += e.hpBonus || 0;
-        agg.command += e.command || 0;
-        agg.threatWarning += e.threatWarning || 0;
-        agg.heroSlot += e.heroSlot || 0;
+        if (r) addEffect(agg, r.effect);
     }
+    for (const [f, on] of Object.entries(state.flags)) if (on && DECISIONS[f] && DECISIONS[f].effect) addEffect(agg, DECISIONS[f].effect);
     return agg;
 }
 
@@ -303,13 +335,14 @@ function doResearch(id) {
     state.research.push(id);
     if (r.effect.flags) Object.assign(state.flags, r.effect.flags);
     addLog(r.icon + ' Recherche : ' + r.name, 'chapter');
+    sfx('research');
     save();
     render();
     if (typeof renderResearch === 'function') renderResearch();
 }
 
 function getHeroSlots() {
-    return 1 + researchEffects().heroSlot;
+    return 1 + activeEffects().heroSlot;
 }
 
 function isHeroWounded(id) {
@@ -326,6 +359,7 @@ function recruitHero(id) {
     for (const [k, v] of Object.entries(h.cost)) state.resources[k] -= v;
     state.heroes.push(id);
     addLog(h.icon + ' ' + h.name + ' rejoint Alpha-7', 'chapter');
+    sfx('recruit');
     save();
     render();
 }
@@ -372,10 +406,10 @@ function isBuildingUnlocked(b) {
 
 function getCombatMods() {
     const mods = {atk: 0, def: 0};
-    if (state.resources.stability < 30) mods.atk -= 2;
-    else if (state.resources.stability > 70) mods.atk += 2;
-    if (state.buildings.includes('bouclier')) mods.def += 1 + getBuildingLevel('bouclier');
-    const re = researchEffects();
+    if (state.resources.stability < BALANCE.stabilityLow) mods.atk -= BALANCE.stabilityAtkMod;
+    else if (state.resources.stability > BALANCE.stabilityHigh) mods.atk += BALANCE.stabilityAtkMod;
+    if (isBuilt('bouclier')) mods.def += BALANCE.bouclierDefBase + getBuildingLevel('bouclier') * BALANCE.bouclierDefPerLevel;
+    const re = activeEffects();
     mods.atk += re.mods.atk;
     mods.def += re.mods.def;
     return mods;
@@ -387,7 +421,7 @@ function buildPlayerUnits() {
 
 function buildUnitsFrom(ids, prefix) {
     const mods = getCombatMods();
-    const hpBonus = researchEffects().hpBonus;
+    const hpBonus = activeEffects().hpBonus;
     return ids.map((id, i) => {
         const d = UNITS.find(u => u.id === id);
         return {
@@ -408,10 +442,25 @@ function buildUnitsFrom(ids, prefix) {
     });
 }
 
-function simulateBattle(playerUnits, enemyUnits) {
+function rollDmg(atk, def, mult = 1) {
+    const v = BALANCE.dmgVariance;
+    return Math.max(1, Math.round((atk - def) * mult * (1 - v + Math.random() * 2 * v)));
+}
+
+function estimateBattle(attackers, defenders, runs = BALANCE.estimateRuns, opts = {}) {
+    let wins = 0, retreats = 0;
+    for (let i = 0; i < runs; i++) {
+        const r = simulateBattle(structuredClone(attackers), structuredClone(defenders), opts);
+        if (r.won) wins++;
+        else if (r.retreated) retreats++;
+    }
+    return {win: wins / runs, retreat: retreats / runs};
+}
+
+function simulateBattle(playerUnits, enemyUnits, opts = {}) {
     const initial = structuredClone({player: playerUnits, enemy: enemyUnits});
     const events = [];
-    let round = 0;
+    let round = 0, retreated = false;
 
     for (const u of playerUnits) {
         if (u.ability === 'aura') {
@@ -436,13 +485,13 @@ function simulateBattle(playerUnits, enemyUnits) {
                 continue;
             }
 
-            const dmg = Math.max(1, unit.atk - target.def);
+            const dmg = rollDmg(unit.atk, target.def);
             target.hp = Math.max(0, target.hp - dmg);
 
             if (unit.ability === 'cleave') {
                 const second = enemies.find(e => e !== target && e.hp > 0);
                 if (second) {
-                    const dmg2 = Math.max(1, Math.round((unit.atk - second.def) * 0.6));
+                    const dmg2 = rollDmg(unit.atk, second.def, 0.6);
                     second.hp = Math.max(0, second.hp - dmg2);
                     events.push({
                         t: 'ability', kind: 'cleave', src: unit.uid,
@@ -468,12 +517,22 @@ function simulateBattle(playerUnits, enemyUnits) {
             }
         }
         events.push({t: 'roundEnd', heals});
+        if (opts.retreatAt && enemyUnits.some(u => u.hp > 0)) {
+            const left = playerUnits.reduce((t, u) => t + Math.max(0, u.hp), 0);
+            const full = playerUnits.reduce((t, u) => t + u.maxHp, 0) || 1;
+            if (left > 0 && left / full < opts.retreatAt) {
+                retreated = true;
+                events.push({t: 'retreat'});
+                break;
+            }
+        }
     }
 
-    const won = playerUnits.some(u => u.hp > 0);
+    const won = !retreated && playerUnits.some(u => u.hp > 0);
     return {
         events,
         won,
+        retreated,
         survivors: playerUnits.filter(u => u.hp > 0 && !u.hero).map(u => u.id),
         heroesDown: playerUnits.filter(u => u.hero && u.hp <= 0).map(u => u.id),
         finalUnits: playerUnits.map(u => ({uid: u.uid, id: u.id, hp: u.hp, hero: !!u.hero})),
@@ -489,6 +548,7 @@ async function playBattle(sim) {
     await delay(600 / battleSpeed);
 
     for (const ev of sim.events) {
+        battleSfx(ev);
         if (ev.t === 'round') {
             battleState.round = ev.round;
         } else if (ev.t === 'dodge') {
@@ -533,6 +593,10 @@ async function playBattle(sim) {
                 await delay(400 / battleSpeed);
                 clearHighlights();
             }
+        } else if (ev.t === 'retreat') {
+            battleState.log.push({text: '🏳️ Repli ordonné — les survivants rompent le combat', type: 'dodge'});
+            renderBattle();
+            await delay(500 / battleSpeed);
         } else if (ev.t === 'roundEnd') {
             for (const h of ev.heals) {
                 const u = byUid[h.uid];
@@ -545,7 +609,7 @@ async function playBattle(sim) {
         }
     }
 
-    await showResult(sim.won);
+    await showResult(sim.won, sim.retreated);
 }
 
 async function playBattle3D(sim) {
@@ -559,6 +623,7 @@ async function playBattle3D(sim) {
     await delay(600 / battleSpeed);
 
     for (const ev of sim.events) {
+        battleSfx(ev);
         if (ev.t === 'round') {
             battleState.round = ev.round;
             renderBattle();
@@ -593,6 +658,10 @@ async function playBattle3D(sim) {
                 renderBattle();
                 await Battle3D.play(ev, 460 / battleSpeed);
             }
+        } else if (ev.t === 'retreat') {
+            battleState.log.push({text: '🏳️ Repli ordonné — les survivants rompent le combat', type: 'dodge'});
+            renderBattle();
+            await delay(500 / battleSpeed);
         } else if (ev.t === 'roundEnd') {
             for (const h of ev.heals) {
                 const u = byUid[h.uid];
@@ -604,16 +673,16 @@ async function playBattle3D(sim) {
         }
     }
 
-    await showResult(sim.won);
+    await showResult(sim.won, sim.retreated);
     Battle3D.stop();
 }
 
-async function runBattle(attackers, defenders) {
-    const sim = simulateBattle(attackers, defenders);
+async function runBattle(attackers, defenders, opts = {}) {
+    const sim = simulateBattle(attackers, defenders, opts);
     for (const id of sim.heroesDown) {
-        state.heroWounded[id] = 2;
+        state.heroWounded[id] = BALANCE.heroWoundTurns;
         const h = HEROES.find(x => x.id === id);
-        if (h) addLog(h.icon + ' ' + h.name + ' est blessé (2 tours)', 'warning');
+        if (h) addLog(h.icon + ' ' + h.name + ' est blessé (' + BALANCE.heroWoundTurns + ' tours)', 'warning');
     }
     if (window.Battle3D && Battle3D.supported) {
         try {
@@ -649,11 +718,12 @@ function showFloat(uid, text, type) {
     setTimeout(() => f.remove(), 800);
 }
 
-function showResult(won) {
+function showResult(won, retreated) {
+    sfx(won ? 'victory' : retreated ? 'retreat' : 'defeat');
     return new Promise(resolve => {
         const div = document.createElement('div');
         div.className = 'result-overlay ' + (won ? 'win' : 'lose');
-        div.innerHTML = '<div class="ro-band"><h2>' + (won ? 'Victoire' : 'Défaite') + '</h2></div>';
+        div.innerHTML = '<div class="ro-band"><h2>' + (won ? 'Victoire' : retreated ? 'Repli' : 'Défaite') + '</h2></div>';
         document.body.appendChild(div);
         setTimeout(() => {
             div.remove();
@@ -670,6 +740,7 @@ function buildBuilding(id) {
     state.buildings.push(id);
     state.buildingLevels[id] = 1;
     addLog(b.icon + ' ' + b.name + ' construit', 'build');
+    sfx('build');
     save();
     render();
 }
@@ -681,6 +752,7 @@ function recruitUnit(id) {
     const atHome = state.map.armyAt === 'alpha7' && !state.map.armyDest;
     const toArmy = atHome && getArmySize() + u.size <= getArmyCap();
     for (const [k, v] of Object.entries(u.cost)) state.resources[k] -= v;
+    state.stats.recruited++;
     if (toArmy) {
         state.army.push(id);
         addLog(u.icon + ' ' + u.name + ' recruté (armée)', 'build');
@@ -688,6 +760,7 @@ function recruitUnit(id) {
         state.map.garrisons.alpha7.push(id);
         addLog(u.icon + ' ' + u.name + ' recruté (garnison Alpha-7)', 'build');
     }
+    sfx('recruit');
     save();
     render();
 }
@@ -724,7 +797,7 @@ function transferToArmy(idx) {
     render();
 }
 
-function departArmy(dest, isAttack) {
+function departArmy(dest, isAttack, leave = []) {
     const m = state.map;
     if (state.phase !== 'build' || m.armyDest || !m.armyAt) return;
     if (state.army.length === 0) return;
@@ -732,7 +805,17 @@ function departArmy(dest, isAttack) {
     if (!t) return;
     const friendly = m.owner[dest] === 'player' || m.allied[dest];
     if (isAttack === friendly) return;
+    const canLeave = m.owner[m.armyAt] === 'player';
+    const kept = canLeave ? leave.filter(i => i >= 0 && i < state.army.length) : [];
+    if (kept.length >= state.army.length) return;
     if (!spendCommand(1)) return;
+    if (kept.length) {
+        if (!m.garrisons[m.armyAt]) m.garrisons[m.armyAt] = [];
+        const stay = new Set(kept);
+        m.garrisons[m.armyAt].push(...state.army.filter((_, i) => stay.has(i)));
+        state.army = state.army.filter((_, i) => !stay.has(i));
+        addLog('🛡️ ' + kept.length + ' unité(s) restent en garnison à ' + getNode(m.armyAt).name, '');
+    }
     m.armyFrom = m.armyAt;
     m.armyDest = dest;
     m.armyEta = t;
@@ -748,19 +831,30 @@ function moveArmy(dest) {
     departArmy(dest, false);
 }
 
-function attackNode(dest) {
-    departArmy(dest, true);
+function attackNode(dest, leave = []) {
+    departArmy(dest, true, leave);
+}
+
+function setRetreat(v) {
+    state.retreatAt = v;
+    save();
+}
+
+function getAllyCost(node) {
+    const raids = (state.map.raided && state.map.raided[node.id]) || 0;
+    return Math.max(BALANCE.allyMinCost, node.allyCost - activeEffects().allyDiscount - raids * BALANCE.raidAllyDiscount);
 }
 
 function allyCity(id) {
     const m = state.map;
     const node = getNode(id);
     if (!node || node.type !== 'city' || m.owner[id] !== 'neutral' || m.allied[id]) return;
-    if ((state.resources.influence || 0) < node.allyCost) return;
+    if ((state.resources.influence || 0) < getAllyCost(node)) return;
     if (!spendCommand(1)) return;
-    state.resources.influence -= node.allyCost;
+    state.resources.influence -= getAllyCost(node);
     m.allied[id] = true;
     addLog('🤝 Alliance scellée avec ' + node.name, 'chapter');
+    sfx('alliance');
     save();
     render();
     pulseNode(id, 0x5fb37e);
@@ -771,7 +865,7 @@ function fortifyNode(id) {
     if (m.owner[id] !== 'player' || m.fortified[id]) return;
     if (!spendCommand(1)) return;
     m.fortified[id] = true;
-    addLog('🧱 ' + getNode(id).name + ' fortifié — +3 DEF au prochain combat', 'build');
+    addLog('🧱 ' + getNode(id).name + ' fortifié — +' + BALANCE.fortifyDef + ' DEF au prochain combat', 'build');
     save();
     render();
     pulseNode(id, 0xc8aa6e);
@@ -779,7 +873,7 @@ function fortifyNode(id) {
 
 function getChapterFromMap() {
     const m = state.map;
-    let ch = state.turn >= 20 ? 3 : 1;
+    let ch = 1;
     for (const node of MAP_NODES) {
         if (!node.unlocksChapter) continue;
         if (m.owner[node.id] === 'player' || m.allied[node.id]) ch = Math.max(ch, node.unlocksChapter);
@@ -793,6 +887,16 @@ function dismissUnit(idx) {
     const u = UNITS.find(x => x.id === id);
     state.army.splice(idx, 1);
     addLog(u.icon + ' ' + u.name + ' libéré', '');
+    save();
+    render();
+}
+
+function dismissGarrison(nodeId, idx) {
+    const g = state.map.garrisons[nodeId] || [];
+    if (idx < 0 || idx >= g.length) return;
+    const u = UNITS.find(x => x.id === g[idx]);
+    g.splice(idx, 1);
+    addLog(u.icon + ' ' + u.name + ' libéré de la garnison de ' + getNode(nodeId).name, '');
     save();
     render();
 }
@@ -811,6 +915,18 @@ function phaseSwitch(cb) {
     });
 }
 
+function sizeOf(ids) {
+    return ids.reduce((s, id) => {
+        const u = UNITS.find(x => x.id === id);
+        return s + (u ? u.size : 1);
+    }, 0);
+}
+
+function getUpkeep() {
+    const g = Object.values(state.map.garrisons).reduce((s, ids) => s + sizeOf(ids), 0);
+    return Math.round((getArmySize() + g) * BALANCE.upkeepEnergyPerSize);
+}
+
 function getCampaignProduction() {
     const p = getProduction();
     const m = state.map;
@@ -820,15 +936,37 @@ function getCampaignProduction() {
             for (const [k, v] of Object.entries(node.prod)) p[k] += v;
         }
     }
+    p.energy -= getUpkeep();
+    p.stability -= conqueredCities(state) * BALANCE.occupationStability;
     return p;
 }
 
-function garrisonBudgetFor(node) {
+function garrisonBudgetFor(node, turn = state.turn) {
     const m = state.map;
-    let budget = node.garrisonBudget;
-    if (node.id === 'berlin') budget -= m.berlinWeakened;
-    if (m.lost[node.id]) budget += Math.round(state.turn * 1.2);
-    return Math.max(4, budget);
+    let budget = Math.round(node.garrisonBudget * BALANCE.garrisonMult);
+    if (node.type === 'capital') budget += Math.round(turn * BALANCE.capitalGrowth) - m.berlinWeakened - activeEffects().capitalWeaken;
+    if (m.lost[node.id]) budget += Math.round(turn * BALANCE.reconquestSlope);
+    return Math.max(BALANCE.garrisonMinBudget, budget);
+}
+
+function assaultUnits(nodeId, ids) {
+    const units = buildUnitsFrom(ids, 'a').concat(buildHeroUnits());
+    if (state.flags.revanche && state.map.lost[nodeId]) units.forEach(u => u.atk += BALANCE.revengeAtk);
+    return units;
+}
+
+function defenseUnits(nodeId) {
+    const m = state.map;
+    let units = buildUnitsFrom(m.garrisons[nodeId] || [], 'g');
+    if (m.armyAt === nodeId && !m.armyDest) units = units.concat(buildUnitsFrom(state.army, 'a')).concat(buildHeroUnits());
+    const bonus = (m.fortified[nodeId] ? BALANCE.fortifyDef : 0) + (nodeId === 'alpha7' ? activeEffects().homeDef : 0);
+    units.forEach(u => u.def += bonus);
+    return units;
+}
+
+function tallyCombat(sim, key) {
+    state.stats.unitsLost += sim.finalUnits.filter(u => !u.hero && u.hp <= 0).length;
+    state.stats[key]++;
 }
 
 function survivorsOf(sim, prefix) {
@@ -844,24 +982,41 @@ async function resolveCombat(c) {
     let sim;
     if (c.kind === 'assault') {
         addLog('⚔️ Assaut sur ' + node.name, 'warning');
-        const attackers = buildUnitsFrom(state.army, 'a').concat(buildHeroUnits());
-        const defenders = generateForce(garrisonBudgetFor(node), seedFor(c.node) + state.turn);
-        sim = await runBattle(attackers, defenders);
+        const attackers = assaultUnits(c.node, state.army);
+        const vengeance = state.flags.revanche && m.lost[c.node];
+        if (vengeance) {
+            addLog('⚔️ Serment de revanche : +' + BALANCE.revengeAtk + ' ATK', 'chapter');
+        }
+        if (node.id === 'berlin' && activeEffects().capitalWeaken) addLog('Failles d\'Hegemonia exploitées : garnison −' + activeEffects().capitalWeaken, 'chapter');
+        const defenders = generateForce(garrisonBudgetFor(node), garrisonSeed(c.node));
+        sim = await runBattle(attackers, defenders, {retreatAt: state.retreatAt});
         battleState = null;
-        if (sim.won) {
+        tallyCombat(sim, sim.won ? 'assaultsWon' : sim.retreated ? 'retreats' : 'assaultsLost');
+        if (sim.won && m.fallenAllies && m.fallenAllies[c.node]) {
+            m.owner[c.node] = 'neutral';
+            m.allied[c.node] = true;
+            delete m.fallenAllies[c.node];
+            state.army = survivorsOf(sim, 'a');
+            addLog('🕊️ ' + node.name + ' est libérée et redevient votre alliée', 'chapter');
+        } else if (sim.won) {
             m.owner[c.node] = 'player';
             state.army = survivorsOf(sim, 'a');
             if (!m.garrisons[c.node]) m.garrisons[c.node] = [];
             addLog('🏴 ' + node.name + ' est sous votre contrôle', 'chapter');
+            if (vengeance) {
+                state.resources.stability += BALANCE.revengeStability;
+                addLog('Serment tenu : +' + BALANCE.revengeStability + '🏛️', 'chapter');
+            }
             if (node.type === 'ruin' && !m.cacheLooted[c.node] && node.cache) {
                 for (const [k, v] of Object.entries(node.cache)) state.resources[k] += v;
                 m.cacheLooted[c.node] = true;
                 addLog('📦 Cache récupérée : ' + fmtProd(node.cache), 'build');
             }
             if (node.type === 'city') {
-                state.resources.stability -= 10;
-                state.resources.influence -= 5;
-                addLog('Occupation de ' + node.name + ' : -10🏛️ -5🌐', 'warning');
+                state.flags.citeConquise = true;
+                state.resources.stability -= BALANCE.cityConquestStability;
+                state.resources.influence -= BALANCE.cityConquestInfluence;
+                addLog('Occupation de ' + node.name + ' : -' + BALANCE.cityConquestStability + '🏛️ -' + BALANCE.cityConquestInfluence + '🌐', 'warning');
             }
             if (node.weakensCapital && !m.weakenedBy[c.node]) {
                 m.berlinWeakened += node.weakensCapital;
@@ -871,23 +1026,42 @@ async function resolveCombat(c) {
             if (node.type === 'capital') {
                 clampRes();
                 save();
-                triggerEnding();
+                showEnding(resolveEnding());
                 return true;
             }
+        } else if (sim.retreated) {
+            state.army = survivorsOf(sim, 'a');
+            m.armyAt = m.armyFrom && (m.owner[m.armyFrom] === 'player' || m.allied[m.armyFrom]) ? m.armyFrom : 'alpha7';
+            state.resources.stability -= BALANCE.retreatStability;
+            addLog('🏳️ Repli devant ' + node.name + ' : ' + state.army.length + ' unité(s) regagnent ' + getNode(m.armyAt).name + ', -' + BALANCE.retreatStability + '🏛️', 'warning');
         } else {
             state.army = [];
             m.armyAt = 'alpha7';
-            addLog('✗ Assaut sur ' + node.name + ' repoussé — l\'armée est perdue', 'warning');
+            state.resources.stability -= BALANCE.assaultLostStability;
+            addLog('✗ Assaut sur ' + node.name + ' repoussé — l\'armée est perdue, -' + BALANCE.assaultLostStability + '🏛️', 'warning');
+        }
+    } else if (c.kind === 'allyDefense') {
+        addLog('🛡️ Votre armée défend ' + node.name + ', votre alliée', 'warning');
+        sim = await runBattle(buildUnitsFrom(state.army, 'a').concat(buildHeroUnits()), generateForce(c.threat.budget, c.threat.seed));
+        battleState = null;
+        tallyCombat(sim, sim.won ? 'defensesWon' : 'defensesLost');
+        if (sim.won) {
+            state.army = survivorsOf(sim, 'a');
+            state.resources.influence += BALANCE.allyDefendInfluence;
+            addLog('✓ ' + node.name + ' tient grâce à votre armée — +' + BALANCE.allyDefendInfluence + '🌐', 'build');
+        } else {
+            state.army = [];
+            m.armyAt = 'alpha7';
+            allyFalls(node);
         }
     } else {
         addLog('🛡️ ' + node.name + ' attaqué !', 'warning');
-        const g = m.garrisons[c.node] || [];
         const armyHere = m.armyAt === c.node && !m.armyDest;
-        let defUnits = buildUnitsFrom(g, 'g');
-        if (armyHere) defUnits = defUnits.concat(buildUnitsFrom(state.army, 'a')).concat(buildHeroUnits());
-        if (m.fortified[c.node]) {
-            defUnits.forEach(u => u.def += 3);
-            delete m.fortified[c.node];
+        const defUnits = defenseUnits(c.node);
+        delete m.fortified[c.node];
+        const hd = c.node === 'alpha7' ? activeEffects().homeDef : 0;
+        if (hd && defUnits.length) {
+            addLog('🧱 Défenses préparées : +' + hd + ' DEF', 'build');
         }
         if (!defUnits.length) {
             sim = {won: false, finalUnits: []};
@@ -896,10 +1070,14 @@ async function resolveCombat(c) {
             sim = await runBattle(defUnits, generateForce(c.threat.budget, c.threat.seed));
             battleState = null;
         }
+        tallyCombat(sim, sim.won ? 'defensesWon' : 'defensesLost');
         if (sim.won) {
             m.garrisons[c.node] = survivorsOf(sim, 'g');
             if (armyHere) state.army = survivorsOf(sim, 'a');
-            addLog('✓ ' + node.name + ' tient bon', 'build');
+            if (c.node === 'alpha7' && BALANCE.siegeStability) {
+                state.resources.stability -= BALANCE.siegeStability;
+                addLog('✓ Alpha-7 tient bon — le siège use la population : -' + BALANCE.siegeStability + '🏛️', 'build');
+            } else addLog('✓ ' + node.name + ' tient bon', 'build');
         } else {
             if (c.node === 'alpha7') {
                 showDefeat('annihilation');
@@ -913,8 +1091,8 @@ async function resolveCombat(c) {
                 state.army = [];
                 m.armyAt = 'alpha7';
             }
-            state.resources.stability -= 8;
-            addLog('🔥 ' + node.name + ' est tombé — -8🏛️', 'warning');
+            state.resources.stability -= BALANCE.nodeLostStability;
+            addLog('🔥 ' + node.name + ' est tombé — -' + BALANCE.nodeLostStability + '🏛️', 'warning');
         }
     }
     state.phase = 'build';
@@ -924,38 +1102,83 @@ async function resolveCombat(c) {
     return false;
 }
 
+function alliedStrength(node) {
+    return node.garrisonBudget + BALANCE.alliedDefenseBase + Math.round(state.turn * BALANCE.alliedDefenseSlope) + activeEffects().alliedHold;
+}
+
+function allyFalls(node) {
+    const m = state.map;
+    delete m.allied[node.id];
+    m.owner[node.id] = 'hostile';
+    m.lost[node.id] = true;
+    if (!m.fallenAllies) m.fallenAllies = {};
+    m.fallenAllies[node.id] = true;
+    state.resources.influence -= BALANCE.allyFallInfluence;
+    addLog('🔥 ' + node.name + ' (allié) est tombé aux mains d\'Hegemonia — -' + BALANCE.allyFallInfluence + '🌐. Reprenez-la pour la libérer', 'warning');
+}
+
+function alliedHolds(th) {
+    const node = getNode(th.nodeId);
+    const militia = generateForce(alliedStrength(node), th.seed + seedFor(node.id)).map(u => ({...u, uid: 'm' + u.uid, side: 'player'}));
+    return simulateBattle(militia, generateForce(th.budget, th.seed)).won;
+}
+
 function resolveAlliedDefense(th) {
     const node = getNode(th.nodeId);
+    if (!alliedHolds(th)) allyFalls(node);
+    else addLog('🛡️ ' + node.name + ' (allié) a repoussé la menace seul', 'build');
+}
+
+function resolveRaid(th) {
     const m = state.map;
-    if (th.budget > node.garrisonBudget + 6 + Math.round(state.turn * 0.8)) {
-        delete m.allied[th.nodeId];
-        state.resources.influence -= 8;
-        addLog('🔥 ' + node.name + ' (allié) est tombé face à la menace — -8🌐', 'warning');
-    } else {
-        addLog('🛡️ ' + node.name + ' (allié) a repoussé la menace seul', 'build');
-    }
+    const node = getNode(th.nodeId);
+    if (!m.raided) m.raided = {};
+    m.raided[node.id] = (m.raided[node.id] || 0) + 1;
+    addLog('⚔️ Hegemonia a razzié ' + node.name + ' — la cité cherche des alliés : alliance −' + BALANCE.raidAllyDiscount + '🌐', 'warning');
+}
+
+function allyNeedsArmy(th) {
+    const m = state.map;
+    return m.armyAt === th.nodeId && !m.armyDest && state.army.length > 0 && !alliedHolds(th);
+}
+
+function heldTerritories() {
+    const m = state.map;
+    return MAP_NODES.filter(n => n.id !== 'alpha7' && (m.owner[n.id] === 'player' || m.allied[n.id])).length;
+}
+
+function threatBudget(turn) {
+    return Math.round(BALANCE.threatBudgetBase + turn * BALANCE.threatBudgetSlope + heldTerritories() * BALANCE.threatBudgetPerTerritory);
+}
+
+function firstThreatTurn() {
+    return BALANCE.threatFirstTurn + (state.seed || 0) % (BALANCE.threatFirstWindow + 1);
 }
 
 function spawnThreats() {
     const m = state.map;
-    const cap = state.turn < 15 ? 2 : 3;
-    const cadence = state.turn < 15 ? 3 : 2;
+    const late = state.turn >= BALANCE.threatLateTurn;
+    const held = heldTerritories();
+    const cap = (late ? BALANCE.threatCapLate : BALANCE.threatCapEarly) + Math.floor(held / BALANCE.threatCapTerritoryStep);
+    const cadence = Math.max(1, (late ? BALANCE.threatCadenceLate : BALANCE.threatCadenceEarly) - Math.floor(held / BALANCE.threatCadenceTerritoryStep));
+    if (state.turn < firstThreatTurn()) return;
     if (m.threats.length >= cap) return;
     if (state.turn - m.lastThreatTurn < cadence) return;
     const targets = [];
+    let total = 0;
     for (const node of MAP_NODES) {
-        if (m.owner[node.id] === 'player') {
-            targets.push(node.id);
-            if (node.id === 'alpha7') targets.push(node.id);
-        } else if (m.allied[node.id]) {
-            targets.push(node.id);
+        const w = node.id === 'alpha7' ? BALANCE.threatHomeWeight : m.owner[node.id] === 'player' ? BALANCE.threatOwnedWeight : m.allied[node.id] ? BALANCE.threatAlliedWeight : node.type === 'city' && m.owner[node.id] === 'neutral' ? BALANCE.threatNeutralWeight : 0;
+        if (w > 0) {
+            targets.push({id: node.id, w});
+            total += w;
         }
     }
-    if (!targets.length) return;
-    const rng = seededRng(state.turn * 6151 + 41);
-    const nodeId = targets[Math.floor(rng() * targets.length)];
-    const preavis = 2 + researchEffects().threatWarning;
-    m.threats.push({nodeId, arrivesIn: preavis, budget: Math.round(5 + state.turn * 2.0), seed: state.turn * 917 + 3});
+    if (!total) return;
+    const rng = seededRng(state.turn * 6151 + 41 + state.seed);
+    let r = rng() * total;
+    const nodeId = (targets.find(t => (r -= t.w) < 0) || targets[targets.length - 1]).id;
+    const preavis = BALANCE.threatWarning + activeEffects().threatWarning;
+    m.threats.push({nodeId, arrivesIn: preavis, budget: threatBudget(state.turn), seed: state.turn * 917 + 3 + state.seed});
     m.lastThreatTurn = state.turn;
     addLog('⚠️ Menace détectée sur ' + getNode(nodeId).name + ' — arrivée dans ' + preavis + ' tours', 'warning');
 }
@@ -969,8 +1192,7 @@ async function endTurn() {
 
     const prod = getCampaignProduction();
     for (const [k, v] of Object.entries(prod)) state.resources[k] += v;
-    if (state.resources.stability > 40) state.resources.stability--;
-    else if (state.resources.stability < 40) state.resources.stability++;
+    state.resources.stability += stabilityDrift();
     clampRes();
     addLog('— Tour ' + state.turn + ' · production : ' + fmtProd(prod), '');
 
@@ -994,7 +1216,9 @@ async function endTurn() {
     m.threats = m.threats.filter(t => t.arrivesIn > 0);
     for (const th of arriving) {
         if (m.owner[th.nodeId] === 'player') combats.push({kind: 'defense', node: th.nodeId, threat: th});
+        else if (m.allied[th.nodeId] && allyNeedsArmy(th)) combats.push({kind: 'allyDefense', node: th.nodeId, threat: th});
         else if (m.allied[th.nodeId]) resolveAlliedDefense(th);
+        else if (m.owner[th.nodeId] === 'neutral') resolveRaid(th);
     }
 
     for (const c of combats) {
@@ -1042,9 +1266,11 @@ async function endTurn() {
     render();
     endTurnBusy = false;
     toast('Tour ' + state.turn + ' · production ' + fmtProd(prod), '');
+    sfx('turn');
     const fresh = m.lastThreatTurn === state.turn - 1 ? m.threats[m.threats.length - 1] : null;
     if (fresh) {
         toast('Menace détectée sur ' + getNode(fresh.nodeId).name, 'warning');
+        sfx('threat');
         pulseNode(fresh.nodeId, 0xc8473c);
     }
     processNext();
@@ -1055,8 +1281,12 @@ function fmtProd(p) {
     return Object.entries(p).filter(([, v]) => v).map(([k, v]) => (v > 0 ? '+' : '') + v + icons[k]).join(' ');
 }
 
+function eventTurn(e) {
+    return e.turn + (e.window ? ((seedFor(e.id) % 9973) + state.seed) % (e.window + 1) : 0);
+}
+
 function findEvent() {
-    return EVENTS.find(e => !state.eventsSeen.includes(e.id) && e.wave === state.turn && (!e.requires || e.requires(state)));
+    return EVENTS.find(e => !state.eventsSeen.includes(e.id) && state.turn >= eventTurn(e) && state.turn <= e.turn + (e.window || 0) && (!e.requires || e.requires(state)));
 }
 
 function findMilestone() {
@@ -1072,17 +1302,19 @@ function processNext() {
 }
 
 function showEvent(evt) {
+    sfx('event');
     const ov = document.getElementById('event-overlay');
     const avail = evt.choices.filter(c => !c.requires || c.requires(state));
     let html = '<div id="event-modal" class="plate"><div class="eyebrow">' + (evt.id.startsWith('ms_') ? 'Jalon' : 'Événement') + ' · Tour ' + state.turn + '</div><h2>' + evt.title + '</h2><div class="rule"></div><div class="event-text" id="evt-text"></div><div class="event-choices" id="evt-ch" style="display:none">';
     avail.forEach((c, i) => {
-        html += '<button class="choice" onclick="onEvtChoice(' + i + ')"><span>' + richText(c.text) + '</span>' + (c.effects ? fxHtml(c.effects) : '<span class="fx">' + richText(c.effect || '') + '</span>') + '</button>';
+        html += '<button class="choice" onclick="onEvtChoice(' + i + ')"><span>' + richText(c.text) + (c.hint ? '<small class="choice-hint">' + richText(c.hint) + '</small>' : '') + '</span>' + (c.effects ? fxHtml(c.effects) : '<span class="fx">' + richText(c.effect || '') + '</span>') + '</button>';
     });
     html += '</div></div>';
     ov.innerHTML = html;
     ov.classList.add('active');
     ov._choices = avail;
-    startTw(evt.text, document.getElementById('evt-text'), () => {
+    const text = evt.text + (evt.echoes || []).filter(x => x.if(state)).map(x => ' ' + x.text).join('');
+    startTw(text, document.getElementById('evt-text'), () => {
         document.getElementById('evt-ch').style.display = 'flex';
     });
     ov.onclick = e => {
@@ -1096,9 +1328,24 @@ function onEvtChoice(i) {
     addLog('► ' + c.text, 'event');
     if (c.effects) for (const [k, v] of Object.entries(c.effects)) state.resources[k] += v;
     if (c.flags) Object.assign(state.flags, c.flags);
+    if (c.ally && state.map.owner[c.ally] === 'neutral' && !state.map.allied[c.ally]) {
+        state.map.allied[c.ally] = true;
+        addLog('🤝 Alliance scellée avec ' + getNode(c.ally).name, 'chapter');
+        sfx('alliance');
+        pulseNode(c.ally, 0x5fb37e);
+    }
+    if (c.hint) addLog('↳ ' + c.hint, 'chapter');
     clampRes();
     ov.classList.remove('active');
     ov.innerHTML = '';
+    if (c.defeat) {
+        showDefeat(c.defeat);
+        return;
+    }
+    if (c.ending) {
+        showEnding(c.ending);
+        return;
+    }
     if (state.resources.stability <= 0) {
         showDefeat('revolte');
         return;
@@ -1162,33 +1409,38 @@ function dismissCh() {
 }
 
 function showDefeat(type) {
+    sfx('defeat');
+    pendingScreens = [];
     const d = DEFEATS[type];
-    document.getElementById('end-content').innerHTML = '<div class="defeat"><h1>' + d.title + '</h1></div><div class="end-sub">Défaite · Tour ' + state.turn + '</div><div class="rule"></div><div class="end-text">' + d.text + '</div>' + statsHtml() + '<button class="btn btn-primary" onclick="backToTitle()">Retour au menu</button>';
+    document.getElementById('end-content').innerHTML = '<div class="defeat"><h1>' + d.title + '</h1></div><div class="end-sub">Défaite · Tour ' + state.turn + '</div><div class="rule"></div><div class="end-text">' + d.text + '</div>' + recapHtml(null) + statsHtml() + '<button class="btn btn-primary" onclick="backToTitle()">Retour au menu</button>';
     showScreen('end-screen');
     deleteSave();
 }
 
-function triggerEnding() {
-    const avail = [];
-    for (const [id, e] of Object.entries(ENDINGS)) if (e.check(state)) avail.push({id, ...e});
-    let html = '<h1>Le Destin d\'Alpha-7</h1><div class="end-sub">Berlin est tombée · Le choix final</div><p style="color:var(--dim);margin-bottom:24px;line-height:1.6">Vos actions ont ouvert les voies suivantes :</p><div class="ending-choices">';
-    avail.forEach(e => {
-        html += '<button onclick="selectEnd(\'' + e.id + '\')"><h3>' + e.title + '</h3><p>' + e.sub + '</p></button>';
-    });
-    html += '</div>';
-    document.getElementById('end-content').innerHTML = html;
-    showScreen('end-screen');
+function resolveEnding() {
+    return Object.keys(ENDINGS).find(k => ENDINGS[k].check && ENDINGS[k].check(state));
 }
 
-function selectEnd(id) {
+function recapHtml(id) {
+    const e = id ? ENDINGS[id] : null;
+    const items = Object.entries(DECISIONS).filter(([f, d]) => state.flags[f] && d.recap).map(([, d]) => '<li>' + esc(d.recap) + '</li>').join('');
+    const others = Object.entries(ENDINGS).filter(([k]) => k !== id).map(([, o]) => '<li><b>' + o.title + '</b> — ' + esc(o.hint) + '</li>').join('');
+    return '<div class="end-why">' + (e ? '<h3>Pourquoi cette fin</h3><p>' + esc(e.why) + '</p>' : '') + '<p class="end-facts">Cités alliées : ' + alliedCities(state) + ' · Cités conquises : ' + conqueredCities(state) + ' · Confiance en PROMETHEUS : ' + iaTrust(state) + '/6</p>' + (items ? '<h3>Vos choix marquants</h3><ul>' + items + '</ul>' : '') + '<h3>Autres destins possibles</h3><ul class="end-others">' + others + '</ul></div>';
+}
+
+function showEnding(id) {
+    sfx('victory');
+    pendingScreens = [];
     const e = ENDINGS[id];
-    const isCap = id === 'capitulation';
-    document.getElementById('end-content').innerHTML = (isCap ? '<div class="defeat">' : '') + '<h1>' + e.title + '</h1>' + (isCap ? '</div>' : '') + '<div class="end-sub">' + (isCap ? 'Défaite' : 'Victoire') + '</div><div class="rule"></div><div class="end-text">' + e.text + '</div>' + statsHtml() + '<button class="btn btn-primary" onclick="backToTitle()">Retour au menu</button>';
+    document.getElementById('end-content').innerHTML = '<h1>' + e.title + '</h1><div class="end-sub">Victoire · ' + e.sub + ' · Tour ' + state.turn + '</div><div class="rule"></div><div class="end-text">' + e.text + '</div>' + recapHtml(id) + statsHtml() + '<button class="btn btn-primary" onclick="backToTitle()">Retour au menu</button>';
+    showScreen('end-screen');
     deleteSave();
 }
 
 function statsHtml() {
-    return '<div class="end-stats"><div class="stat-box"><div class="sv">' + state.turn + '</div><div class="sl">Tours</div></div><div class="stat-box"><div class="sv">' + state.buildings.length + '</div><div class="sl">Bâtiments</div></div><div class="stat-box"><div class="sv">' + state.eventsSeen.length + '</div><div class="sl">Événements</div></div></div>';
+    const st = state.stats || newStats();
+    const box = (v, l) => '<div class="stat-box"><div class="sv">' + v + '</div><div class="sl">' + l + '</div></div>';
+    return '<div class="end-stats">' + box(state.turn, 'Tours') + box(state.buildings.length, 'Bâtiments') + box(state.eventsSeen.length, 'Événements') + box(st.assaultsWon, 'Assauts gagnés') + box(st.assaultsLost, 'Assauts perdus') + box(st.retreats, 'Replis') + box(st.defensesWon, 'Défenses tenues') + box(st.defensesLost, 'Défenses perdues') + box(st.recruited, 'Recrues') + box(st.unitsLost, 'Unités perdues') + '</div>';
 }
 
 function backToTitle() {
@@ -1231,9 +1483,12 @@ function resetView() {
     lastResources = null;
 }
 
-function newGame() {
+function newGame(diff) {
     deleteSave();
+    const d = DIFFICULTIES[diff] ? diff : DIFFICULTIES[typeof difficultyPref === 'function' && difficultyPref()] ? difficultyPref() : 'normal';
+    applyDifficulty(d);
     state = defaultState();
+    state.difficulty = d;
     state.guide = newGuide(guidePref());
     resetView();
     showScreen('game-screen');

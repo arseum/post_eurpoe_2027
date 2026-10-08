@@ -386,6 +386,24 @@ button:focus-visible, [tabindex]:focus-visible {
     color: var(--dim)
 }
 
+.title-opt {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 22px;
+    max-width: 380px
+}
+
+.title-opt small {
+    color: var(--text-2);
+    font-size: .8rem;
+    line-height: 1.4
+}
+
+.rail-btn.muted i {
+    color: var(--text-2)
+}
+
 .switch {
     display: flex;
     align-items: center;
@@ -684,6 +702,88 @@ button:focus-visible, [tabindex]:focus-visible {
     line-height: 1.55;
     color: var(--text);
     text-wrap: pretty
+}
+
+.assault-box {
+    width: min(560px, 100%);
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px
+}
+
+.odds {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px
+}
+
+.odd {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 6px;
+    background: rgba(4, 8, 15, .5);
+    border: 1px solid var(--gold-3)
+}
+
+.odd b {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 1.6rem;
+    color: var(--gold-hi)
+}
+
+.odd span {
+    font-size: .75rem;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--text-2)
+}
+
+.odd.good b, .odds-inline.good {
+    color: var(--teal)
+}
+
+.odd.mid b, .odds-inline.mid {
+    color: var(--gold-hi)
+}
+
+.odd.bad b, .odds-inline.bad {
+    color: var(--danger)
+}
+
+.assault-units {
+    display: flex;
+    flex-direction: column;
+    gap: 6px
+}
+
+.assault-units .row.off {
+    opacity: .5
+}
+
+.engage {
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: .8rem
+}
+
+.engage.on {
+    color: var(--teal)
+}
+
+.seg {
+    display: flex;
+    background: rgba(4, 8, 15, .85);
+    border: 1px solid var(--gold-3);
+    padding: 4px
+}
+
+.seg .speed-btn {
+    flex: 1;
+    width: auto
 }
 
 .confirm-actions {
@@ -1972,6 +2072,16 @@ body.in-battle .build-only {
 .fx .pos { color: var(--stability) }
 .fx .neg { color: var(--danger) }
 
+.choice-hint {
+    display: block;
+    margin-top: 4px;
+    font-size: .8rem;
+    color: var(--teal);
+    line-height: 1.4
+}
+
+.choice:nth-child(4) { animation-delay: .18s }
+
 .chapter-box {
     text-align: center
 }
@@ -2203,15 +2313,15 @@ body.in-battle .build-only {
 }
 
 .end-stats {
-    display: flex;
-    justify-content: center;
-    gap: 10px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: 8px;
     margin-bottom: 28px
 }
 
 .stat-box {
-    min-width: 120px;
-    padding: 12px;
+    min-width: 0;
+    padding: 10px 6px;
     border: 1px solid var(--gold-3);
     background: rgba(4, 8, 15, .5)
 }
@@ -2223,10 +2333,41 @@ body.in-battle .build-only {
 }
 
 .stat-box .sl {
-    font-size: .68rem;
-    letter-spacing: .2em;
+    font-size: .64rem;
+    letter-spacing: .12em;
     text-transform: uppercase;
     color: var(--text-2)
+}
+
+.end-why {
+    max-width: 58ch;
+    margin: 0 auto 26px;
+    text-align: left;
+    line-height: 1.6;
+    color: var(--text)
+}
+
+.end-why h3 {
+    margin: 18px 0 6px;
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 1.05rem;
+    color: var(--gold-hi)
+}
+
+.end-why ul {
+    margin: 0;
+    padding-left: 1.1em
+}
+
+.end-facts {
+    color: var(--teal);
+    font-size: .86rem
+}
+
+.end-others {
+    color: var(--text-2);
+    font-size: .86rem
 }
 
 .ending-choices {

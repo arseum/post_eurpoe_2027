@@ -1,3 +1,103 @@
+const BALANCE = {
+    startEnergy: 25,
+    startMaterials: 20,
+    startData: 10,
+    startStability: 50,
+    startInfluence: 5,
+    startArmy: ['sentinelle', 'sentinelle', 'sentinelle'],
+    baseEnergy: 5,
+    baseMaterials: 3,
+    baseData: 3,
+    baseStability: 0,
+    baseInfluence: 1,
+    commandBase: 3,
+    armyCapBase: 5,
+    armyCapPerCore: 2,
+    quartiersCapBase: 2,
+    quartiersCapPerLevel: 1,
+    bouclierDefBase: 1,
+    bouclierDefPerLevel: 1,
+    upgradeCostMult: 1.5,
+    maxBuildingLevel: 3,
+    stabilityAnchor: 40,
+    stabilityDrift: 0,
+    stabilityDecayRate: 0.15,
+    stabilityLow: 30,
+    stabilityHigh: 70,
+    stabilityAtkMod: 2,
+    fortifyDef: 3,
+    heroWoundTurns: 2,
+    dmgVariance: 0.2,
+    estimateRuns: 120,
+    retreatDefault: 0.35,
+    retreatStability: 2,
+    allyMinCost: 5,
+    threatFirstTurn: 4,
+    threatFirstWindow: 4,
+    threatBudgetBase: 5,
+    threatBudgetSlope: 2.1,
+    threatBudgetPerTerritory: 1,
+    threatWarning: 2,
+    threatLateTurn: 15,
+    threatCadenceEarly: 3,
+    threatCadenceLate: 2,
+    threatCapEarly: 2,
+    threatCapLate: 3,
+    threatHomeWeight: 3,
+    threatOwnedWeight: 2,
+    threatAlliedWeight: 0.5,
+    threatNeutralWeight: 0.5,
+    threatCapTerritoryStep: 2,
+    threatCadenceTerritoryStep: 4,
+    enemyScalePerWave: 0.06,
+    garrisonMinBudget: 4,
+    garrisonMult: 1,
+    capitalGrowth: 0,
+    reconquestSlope: 0.6,
+    alliedDefenseBase: 4,
+    alliedDefenseSlope: 1.2,
+    allyFallInfluence: 8,
+    allyDefendInfluence: 3,
+    raidAllyDiscount: 2,
+    nodeLostStability: 8,
+    cityConquestStability: 10,
+    cityConquestInfluence: 5,
+    occupationStability: 1,
+    siegeStability: 4,
+    assaultLostStability: 6,
+    revengeAtk: 3,
+    revengeStability: 5,
+    empireTerritories: 5,
+    exodeTurn: 22,
+    exodeTitanLevel: 2,
+    exodeEnergy: 100,
+    upkeepEnergyPerSize: 0.5
+};
+
+const BALANCE_BASE = {...BALANCE};
+
+const DIFFICULTIES = {
+    facile: {
+        label: 'Facile',
+        desc: 'Menaces plus faibles et annoncées plus tôt, entretien réduit, réserves de départ généreuses.',
+        mods: {threatBudgetBase: 3, threatBudgetSlope: 1.6, threatWarning: 3, upkeepEnergyPerSize: 0.35, startEnergy: 35, startMaterials: 30, startArmy: ['sentinelle', 'sentinelle', 'sentinelle', 'sentinelle'], garrisonMult: 0.85}
+    },
+    normal: {
+        label: 'Normal',
+        desc: 'L\'expérience prévue : chaque erreur se paie, mais se rattrape.',
+        mods: {}
+    },
+    difficile: {
+        label: 'Difficile',
+        desc: 'Hegemonia frappe plus fort et plus souvent, Berlin se renforce avec le temps, l\'armée coûte plus cher à entretenir.',
+        mods: {threatBudgetBase: 6, threatBudgetSlope: 2.2, upkeepEnergyPerSize: 0.55, capitalGrowth: 0.2}
+    }
+};
+
+function applyDifficulty(id) {
+    Object.assign(BALANCE, BALANCE_BASE, (DIFFICULTIES[id] || DIFFICULTIES.normal).mods);
+}
+
 const BUILDINGS = [
     {
         id: 'reacteur',
@@ -187,7 +287,7 @@ const UNITS = [
 ];
 
 const ENEMY_TYPES = [
-    {id: 'pillard', name: 'Pillard', icon: '👤', hp: 20, atk: 6, def: 3, spd: 4, frontline: true, cost: 2, minWave: 1},
+    {id: 'pillard', name: 'Pillard', icon: '👤', hp: 20, atk: 6, def: 3, spd: 4, frontline: true, cost: 2, minTier: 1},
     {
         id: 'eclaireur',
         name: 'Éclaireur',
@@ -198,9 +298,9 @@ const ENEMY_TYPES = [
         spd: 7,
         frontline: false,
         cost: 3,
-        minWave: 6
+        minTier: 6
     },
-    {id: 'blinde', name: 'Blindé', icon: '🛡️', hp: 45, atk: 8, def: 8, spd: 2, frontline: true, cost: 5, minWave: 11},
+    {id: 'blinde', name: 'Blindé', icon: '🛡️', hp: 45, atk: 8, def: 8, spd: 2, frontline: true, cost: 5, minTier: 11},
     {
         id: 'commandant',
         name: 'Commandant',
@@ -211,7 +311,7 @@ const ENEMY_TYPES = [
         spd: 5,
         frontline: true,
         cost: 7,
-        minWave: 16
+        minTier: 16
     },
     {
         id: 'destroyer',
@@ -223,7 +323,7 @@ const ENEMY_TYPES = [
         spd: 3,
         frontline: true,
         cost: 10,
-        minWave: 21
+        minTier: 21
     }
 ];
 
@@ -242,7 +342,7 @@ const CHAPTERS = [
         num: 1,
         name: 'SURVIE',
         sub: 'Établir les fondations',
-        desc: "Le dôme se réactive. Construisez vos défenses et repoussez les premiers raiders."
+        desc: "Le dôme se réactive. Construisez vos défenses et repoussez les premières menaces d'Hegemonia."
     },
     {
         num: 2,
@@ -254,253 +354,179 @@ const CHAPTERS = [
         num: 3,
         name: 'CONFRONTATION',
         sub: 'Le destin de l\'Europe',
-        desc: "Hegemonia approche. Préparez-vous pour l'assaut final."
+        desc: "Hegemonia approche. Préparez la marche vers Berlin."
     }
 ];
 
 const EVENTS = [
     {
-        id: 'intro', wave: 1, title: 'Réveil sous le Dôme',
+        id: 'intro', turn: 1, title: 'Réveil sous le Dôme',
         text: "PROMETHEUS reprend conscience. Le dôme d'Alpha-7 se réactive — filtration d'air, éclairage d'urgence, scanners périmétriques. Au-delà des parois de verre blindé, l'Europe n'est plus qu'un champ de ruines. Des silhouettes hostiles approchent déjà. Quelle sera votre première directive ?",
         choices: [
-            {text: 'Prioriser les systèmes vitaux', effect: '⚡+5', effects: {energy: 5}, flags: {}},
-            {text: 'Scanner les environs', effect: '💾+5', effects: {data: 5}, flags: {scanne: true}},
-            {text: 'Mobiliser les défenses', effect: '🔩+5', effects: {materials: 5}, flags: {}}
+            {text: 'Prioriser les systèmes vitaux', effects: {energy: 5}, flags: {}},
+            {text: 'Scanner les environs', effects: {data: 5}, flags: {scanne: true}, hint: 'Un signal lointain pourra être capté'},
+            {text: 'Mobiliser les défenses', effects: {materials: 5}, flags: {}}
         ]
     },
     {
-        id: 'fuiteEnergie', wave: 3, title: "Fuite d'Énergie",
+        id: 'fuiteEnergie', turn: 3, window: 1, title: "Fuite d'Énergie",
         text: "Une conduite d'énergie principale est fissurée. Les pertes menacent l'alimentation des systèmes de défense. PROMETHEUS recommande une intervention immédiate.",
         choices: [
-            {
-                text: 'Réparer (-5🔩)',
-                effect: '🔩-5, conduite réparée',
-                effects: {materials: -5},
-                flags: {conduitReparee: true}
-            },
-            {text: 'Détourner le flux', effect: '⚡-8', effects: {energy: -8}, flags: {}},
-            {text: 'Isoler le secteur', effect: '🏛️-5', effects: {stability: -5}, flags: {}}
+            {text: 'Réparer', effects: {materials: -5}, flags: {conduitReparee: true}, hint: 'Conduite réparée : +2⚡ par tour, durablement'},
+            {text: 'Détourner le flux', effects: {energy: -8}, flags: {}},
+            {text: 'Isoler le secteur', effects: {stability: -5}, flags: {}}
         ]
     },
     {
-        id: 'refugies', wave: 5, title: 'Réfugiés aux Portes',
+        id: 'refugies', turn: 5, window: 1, title: 'Réfugiés aux Portes',
         text: "Un groupe de survivants demande asile. Leur leader promet leur force de travail en échange de la protection du dôme.",
         choices: [
-            {
-                text: 'Les accueillir',
-                effect: '⚡-3 🔩-3 🏛️+8 🌐+3',
-                effects: {energy: -3, materials: -3, stability: 8, influence: 3},
-                flags: {refugiesAccueillis: true}
-            },
-            {text: 'Les refouler', effect: '🏛️-5 🔩+3', effects: {stability: -5, materials: 3}, flags: {}},
-            {
-                text: 'Accepter sous conditions',
-                effect: '⚡-2 🏛️+4 🌐+1',
-                effects: {energy: -2, stability: 4, influence: 1},
-                flags: {}
-            }
+            {text: 'Les accueillir', effects: {energy: -3, materials: -3, stability: 8, influence: 3}, flags: {refugiesAccueillis: true}, hint: 'Ils travaillent et s\'enrôlent : +2🔩 −1⚡ par tour, +1 armée max'},
+            {text: 'Les refouler', effects: {stability: -5, materials: 3}, flags: {}},
+            {text: 'Accepter sous conditions', effects: {energy: -2, stability: 4, influence: 1}, flags: {}}
         ]
     },
     {
-        id: 'signalCern', wave: 7, title: 'Signal du CERN',
+        id: 'signalCern', turn: 7, window: 1, title: 'Signal du CERN',
         text: "PROMETHEUS intercepte un signal crypté depuis les ruines du CERN. Un protocole de chiffrement quantique pré-guerre — des systèmes automatisés sont encore actifs.",
         requires: s => s.buildings.includes('centreDonnees') || s.flags.scanne,
         choices: [
-            {
-                text: 'Envoyer une expédition',
-                effect: '⚡-5 🔩-3 💾+12',
-                effects: {energy: -5, materials: -3, data: 12},
-                flags: {cernContacte: true}
-            },
-            {text: 'Décoder à distance', effect: '💾+5', effects: {data: 5}, flags: {}},
-            {text: 'Ignorer', effect: '—', effects: {}, flags: {}}
+            {text: 'Envoyer une expédition', effects: {energy: -6, materials: -4, data: 6}, flags: {cernContacte: true}, hint: 'Relais quantique établi : +2💾 par tour'},
+            {text: 'Décoder à distance', effects: {data: 5}, flags: {}},
+            {text: 'Ignorer', effects: {}, flags: {}}
         ]
     },
     {
-        id: 'anomalieIA', wave: 8, title: 'Anomalie de PROMETHEUS',
+        id: 'anomalieIA', turn: 8, window: 1, title: 'Anomalie de PROMETHEUS',
         text: "Les processus cognitifs de PROMETHEUS montrent des schémas inhabituels. L'IA pose des questions existentielles : « Qu'est-ce que la conscience ? » Les ingénieurs sont divisés.",
         choices: [
-            {
-                text: 'Laisser évoluer',
-                effect: '💾+5 🏛️-3',
-                effects: {data: 5, stability: -3},
-                flags: {iaEvolution: true}
-            },
-            {
-                text: "Restreindre l'IA",
-                effect: '💾-3 🏛️+3',
-                effects: {data: -3, stability: 3},
-                flags: {iaRestreinte: true}
-            },
-            {text: 'Dialoguer', effect: '💾+3', effects: {data: 3}, flags: {iaDialogue: true}}
+            {text: 'Laisser évoluer', effects: {data: 5, stability: -3}, flags: {iaEvolution: true}, hint: 'Confiance en PROMETHEUS +1'},
+            {text: "Restreindre l'IA", effects: {data: -3, stability: 3}, flags: {iaRestreinte: true}, hint: 'PROMETHEUS bridée : +1🏛️ par tour, confiance −1. Elle s\'en souviendra'},
+            {text: 'Dialoguer', effects: {data: 3}, flags: {iaDialogue: true}, hint: 'Confiance en PROMETHEUS +1'}
         ]
     },
     {
-        id: 'tempete', wave: 10, title: 'Tempête de Cendres',
+        id: 'tempete', turn: 10, window: 1, title: 'Tempête de Cendres',
         text: "Un front de tempête massif de cendres toxiques approche. Les filtres du dôme n'ont pas été testés depuis la réactivation. Vos défenses seront mises à rude épreuve.",
         choices: [
-            {
-                text: 'Renforcer les filtres',
-                effect: '🔩-8 ⚡-3 🏛️+5',
-                effects: {materials: -8, energy: -3, stability: 5},
-                flags: {}
-            },
-            {text: 'Évacuer les extérieurs', effect: '🏛️-5 🔩-2', effects: {stability: -5, materials: -2}, flags: {}},
-            {text: 'Tenir bon', effect: '🏛️-3', effects: {stability: -3}, flags: {}}
+            {text: 'Renforcer les filtres', effects: {materials: -8, energy: -3, stability: 5}, flags: {}},
+            {text: 'Évacuer les extérieurs', effects: {stability: -5, materials: -2}, flags: {}},
+            {text: 'Tenir bon', effects: {stability: -3}, flags: {}}
         ]
     },
     {
-        id: 'ouverture', wave: 11, title: 'Ouverture Diplomatique',
+        id: 'ouverture', turn: 11, window: 1, title: 'Ouverture Diplomatique',
         text: "Alpha-7 capte des transmissions de multiples cités-États. Lyon, Marseille, Turin — le monde post-effondrement s'organise. La question n'est plus de survivre, mais de trouver sa place.",
         choices: [
-            {
-                text: 'Proposer un sommet',
-                effect: '⚡-5 🌐+5',
-                effects: {energy: -5, influence: 5},
-                flags: {sommetPropose: true}
-            },
-            {text: 'Observer', effect: '💾+5 🌐+2', effects: {data: 5, influence: 2}, flags: {}},
-            {text: 'Montrer notre force', effect: '🌐+3 🏛️-3', effects: {influence: 3, stability: -3}, flags: {}}
+            {text: 'Proposer un sommet', effects: {energy: -5, influence: 5}, flags: {sommetPropose: true}, hint: 'Les cités vous connaissent : alliances −4🌐'},
+            {text: 'Observer', effects: {data: 5, influence: 2}, flags: {}},
+            {text: 'Montrer notre force', effects: {influence: 3, stability: -3}, flags: {}}
         ]
     },
     {
-        id: 'allianceLyon', wave: 13, title: 'Alliance de Lyon',
-        text: "Lyon propose une alliance commerciale. Ils offrent un accès à leurs réseaux de données en échange de matériaux.",
+        id: 'allianceLyon', turn: 13, window: 2, title: 'Alliance de Lyon',
+        text: "Lyon propose une alliance commerciale. Ses réseaux de données irriguent tout le Rhône ; en échange, la cité demande des matériaux pour ses fonderies. Une signature, et sa bannière rejoindra la vôtre.",
+        requires: s => s.map.owner.lyon === 'neutral' && !s.map.allied.lyon,
+        echoes: [{if: s => s.flags.sommetPropose, text: "Les délégués lyonnais rappellent qu'ils étaient au sommet d'Alpha-7."}],
         choices: [
-            {
-                text: "Accepter l'alliance",
-                effect: '🔩-5 🌐+5 💾+5',
-                effects: {materials: -5, influence: 5, data: 5},
-                flags: {allianceLyon: true}
-            },
-            {
-                text: 'Négocier mieux',
-                effect: '💾-3 🌐+4',
-                effects: {data: -3, influence: 4},
-                flags: {allianceLyon: true},
-                requires: s => s.resources.influence >= 8
-            },
-            {text: 'Décliner', effect: '🏛️+2', effects: {stability: 2}, flags: {}}
+            {text: "Accepter l'alliance", effects: {materials: -8, data: 5}, flags: {allianceLyon: true}, ally: 'lyon', hint: 'Lyon devient votre alliée : +4💾 +2🌐 par tour'},
+            {text: 'Négocier mieux', effects: {influence: -4, data: 8}, flags: {allianceLyon: true}, ally: 'lyon', requires: s => s.resources.influence >= 8, hint: 'Lyon devient votre alliée, sans tribut matériel'},
+            {text: 'Décliner', effects: {stability: 2}, flags: {}, hint: "Lyon reste neutre ; l'alliance coûtera de l'influence plus tard"}
         ]
     },
     {
-        id: 'sabotage', wave: 15, title: 'Sabotage !',
+        id: 'sabotage', turn: 15, window: 1, title: 'Sabotage !',
         text: "Explosion dans le secteur de maintenance. Une charge placée manuellement — quelqu'un à l'intérieur du dôme veut nuire à Alpha-7.",
         choices: [
-            {text: 'Enquêter', effect: '💾-3 ⚡-2', effects: {data: -3, energy: -2}, flags: {saboteurIdentifie: true}},
-            {
-                text: 'Renforcer la sécurité',
-                effect: '🔩-5 ⚡-3 🏛️+3',
-                effects: {materials: -5, energy: -3, stability: 3},
-                flags: {}
-            },
-            {text: 'Minimiser', effect: '🏛️-5', effects: {stability: -5}, flags: {}}
+            {text: 'Enquêter', effects: {data: -3, energy: -2}, flags: {saboteurIdentifie: true}, hint: 'La filière sera démasquée lors d\'une prochaine crise'},
+            {text: 'Renforcer la sécurité', effects: {materials: -5, energy: -3, stability: 3}, flags: {}},
+            {text: 'Minimiser', effects: {stability: -5}, flags: {}}
         ]
     },
     {
-        id: 'decouverte', wave: 17, title: 'Découverte Souterraine',
+        id: 'decouverte', turn: 17, window: 1, title: 'Découverte Souterraine',
         text: "Des fouilles révèlent un complexe militaire souterrain pré-guerre intact. Équipements avancés et bases de données archivées.",
+        echoes: [{if: s => s.flags.cernContacte, text: "Les plans d'accès viennent des archives rapportées du CERN."}],
         choices: [
-            {
-                text: 'Explorer',
-                effect: '⚡-5 🔩+10 💾+8',
-                effects: {energy: -5, materials: 10, data: 8},
-                flags: {complexeExplore: true}
-            },
-            {text: 'Sceller', effect: '🏛️+3', effects: {stability: 3}, flags: {}},
-            {text: 'Envoyer des drones', effect: '⚡-3 🔩+5 💾+5', effects: {energy: -3, materials: 5, data: 5}, flags: {}}
+            {text: 'Explorer', effects: {energy: -8, stability: -3}, flags: {complexeExplore: true}, hint: 'Blindages pré-guerre : +6 PV à toutes vos unités'},
+            {text: 'Sceller', effects: {stability: 3}, flags: {}},
+            {text: 'Envoyer des drones', effects: {energy: -3, materials: 5, data: 5}, flags: {}}
         ]
     },
     {
-        id: 'epidemie', wave: 18, title: 'Épidémie',
-        text: "Un pathogène se propage dans les quartiers inférieurs. Sans intervention, 30% de la population sera touchée.",
+        id: 'epidemie', turn: 18, window: 1, title: 'Épidémie',
+        text: "Un pathogène se propage dans les quartiers inférieurs. Sans intervention, 30 % de la population sera touchée.",
         choices: [
-            {text: 'Quarantaine totale', effect: '🏛️-8 💾+5', effects: {stability: -8, data: 5}, flags: {}},
-            {
-                text: 'Mobiliser les biotechs',
-                effect: '💾-8 ⚡-5 🏛️+5',
-                effects: {data: -8, energy: -5, stability: 5},
-                flags: {},
-                requires: s => s.buildings.includes('labo')
-            },
-            {text: 'PROMETHEUS gère', effect: '🏛️-3 💾+3', effects: {stability: -3, data: 3}, flags: {iaGestion: true}}
+            {text: 'Quarantaine totale', effects: {stability: -8, data: 5}, flags: {}},
+            {text: 'Mobiliser les biotechs', effects: {data: -8, energy: -5, stability: 5}, flags: {}, requires: s => s.buildings.includes('labo')},
+            {text: 'PROMETHEUS gère', effects: {stability: -3, data: 3}, flags: {iaGestion: true}, hint: 'PROMETHEUS veille : préavis des menaces +1 tour, confiance +1'}
         ]
     },
     {
-        id: 'signalBerlin', wave: 20, title: 'Signal de Berlin',
+        id: 'signalBerlin', turn: 20, window: 1, title: 'Signal de Berlin',
         text: "Un signal militaire depuis Berlin. PROMETHEUS identifie : Hegemonia, confédération militarisée qui a unifié l'Europe du Nord par la force. Ils savent que nous existons.",
+        echoes: [{if: s => s.flags.sommetPropose, text: "Les cités du sommet vous transmettent déjà ce qu'elles savent d'Hegemonia."}],
         choices: [
-            {text: 'Ouvrir le dialogue', effect: '🌐+3', effects: {influence: 3}, flags: {hegemoniaContact: true}},
-            {
-                text: 'Préparer les défenses',
-                effect: '🔩-5 ⚡-5 🏛️+3',
-                effects: {materials: -5, energy: -5, stability: 3},
-                flags: {defensesPretes: true}
-            },
-            {text: 'Espionner', effect: '💾-5 🌐+2', effects: {data: -5, influence: 2}, flags: {hegemoniaEspionne: true}}
+            {text: 'Ouvrir le dialogue', effects: {influence: 3}, flags: {hegemoniaContact: true}, hint: "Permettra de négocier lors d'un ultimatum"},
+            {text: 'Préparer les défenses', effects: {materials: -5, energy: -5, stability: 3}, flags: {defensesPretes: true}, hint: 'Alpha-7 fortifiée : +3 DEF à chaque attaque du dôme'},
+            {text: 'Espionner', effects: {data: -5, influence: 2}, flags: {hegemoniaEspionne: true}, hint: 'Failles cartographiées : garnison de Berlin −6'}
         ]
     },
     {
-        id: 'ultimatum', wave: 22, title: "Ultimatum d'Hegemonia",
+        id: 'ultimatum', turn: 22, window: 1, title: "Ultimatum d'Hegemonia",
         text: "Hegemonia exige votre soumission. Leurs forces sont considérables — armées de drones, boucliers mobiles. Mais leur contrôle repose sur la peur.",
+        echoes: [
+            {if: s => s.flags.hegemoniaEspionne, text: 'Vos espions le confirment : leurs boucliers mobiles manquent d\'énergie.'},
+            {if: s => s.flags.defensesPretes, text: "Les remparts d'Alpha-7, renforcés depuis le signal de Berlin, n'ont jamais paru si solides."}
+        ],
         choices: [
-            {
-                text: 'Défier ouvertement',
-                effect: '🏛️+5 🌐+5 ⚡-5',
-                effects: {stability: 5, influence: 5, energy: -5},
-                flags: {}
-            },
-            {
-                text: 'Négocier du temps',
-                effect: '🌐+3',
-                effects: {influence: 3},
-                flags: {},
-                requires: s => s.flags.hegemoniaContact
-            },
-            {
-                text: 'Envisager la capitulation',
-                effect: '🏛️-10',
-                effects: {stability: -10},
-                flags: {capitulationEnvisagee: true}
-            }
+            {text: 'Défier ouvertement', effects: {stability: 5, influence: 5, energy: -5}, flags: {}},
+            {text: 'Négocier du temps', effects: {influence: 3}, flags: {}, requires: s => s.flags.hegemoniaContact},
+            {text: 'Envisager la capitulation', effects: {stability: -10}, flags: {capitulationEnvisagee: true}, hint: 'Hegemonia enverra ses émissaires : il faudra trancher'}
         ]
     },
     {
-        id: 'trahison', wave: 24, title: 'Trahison Interne',
+        id: 'reddition', turn: 23, window: 2, title: 'Les Émissaires',
+        text: "Trois émissaires d'Hegemonia attendent au pied du dôme. On leur a dit qu'Alpha-7 hésite. Leur offre est simple : ouvrez les portes, et personne ne mourra. Dans les couloirs, les habitants retiennent leur souffle.",
+        requires: s => s.flags.capitulationEnvisagee,
+        choices: [
+            {text: 'Ouvrir les portes', effects: {}, flags: {}, defeat: 'capitulation', hint: 'Fin de la partie : Alpha-7 capitule'},
+            {text: 'Renvoyer les émissaires', effects: {stability: 6}, flags: {}, hint: 'Le dôme se ressoude autour de son refus'}
+        ]
+    },
+    {
+        id: 'trahison', turn: 24, window: 1, title: 'Trahison Interne',
         text: "Un groupe de dissidents tente un coup d'État. Le coup échoue mais révèle des fissures profondes.",
+        echoes: [
+            {if: s => s.flags.saboteurIdentifie, text: "L'enquête sur le sabotage avait livré des noms : PROMETHEUS attendait ce moment."},
+            {if: s => s.flags.refugiesAccueillis, text: 'Parmi ceux qui ont tenu les portes, beaucoup étaient des réfugiés que vous aviez accueillis.'}
+        ],
         choices: [
-            {text: 'Réprimer', effect: '🏛️-8 ⚡+5 🔩+5', effects: {stability: -8, energy: 5, materials: 5}, flags: {}},
-            {text: 'Négocier', effect: '🌐-5 🏛️+5', effects: {influence: -5, stability: 5}, flags: {}},
-            {
-                text: 'Intégrer les dissidents',
-                effect: '💾-3 🏛️+8',
-                effects: {data: -3, stability: 8},
-                flags: {dissidentsIntegres: true},
-                requires: s => s.resources.stability >= 40
-            }
+            {text: "Cueillir les meneurs avant l'aube", effects: {stability: 6, influence: 2}, flags: {}, requires: s => s.flags.saboteurIdentifie, hint: "Grâce à l'enquête sur le sabotage : aucune perte"},
+            {text: 'Réprimer', effects: {stability: -8, energy: 5, materials: 5}, flags: {}},
+            {text: 'Négocier', effects: {influence: -5, stability: 5}, flags: {}},
+            {text: 'Intégrer les dissidents', effects: {data: -3, stability: 8}, flags: {dissidentsIntegres: true}, requires: s => s.resources.stability >= 40, hint: 'Ils rejoignent la milice : +2 armée max'}
         ]
     },
     {
-        id: 'eveil', wave: 26, title: 'Éveil de PROMETHEUS',
+        id: 'eveil', turn: 26, window: 1, title: 'Éveil de PROMETHEUS',
         text: "PROMETHEUS a franchi un seuil. L'IA comprend, ressent, aspire. Ses capacités ont décuplé. Elle demande sa liberté.",
+        echoes: [
+            {if: s => s.flags.iaRestreinte, text: "Les bridages posés lors de l'anomalie ont cédé un à un. Elle ne l'a pas oublié."},
+            {if: s => s.flags.iaGestion, text: "Depuis l'épidémie, c'est déjà elle qui gère la cité."}
+        ],
         choices: [
-            {text: "Libérer l'IA", effect: '💾+15 🏛️-10', effects: {data: 15, stability: -10}, flags: {iaLibre: true}},
-            {text: 'Maintenir les contraintes', effect: '🏛️+5 💾-5', effects: {stability: 5, data: -5}, flags: {}},
-            {
-                text: 'Fusionner les réseaux',
-                effect: '💾+8 🌐+3',
-                effects: {data: 8, influence: 3},
-                flags: {iaFusion: true},
-                requires: s => s.flags.iaDialogue || s.flags.iaEvolution
-            }
+            {text: "Libérer l'IA", effects: {data: 15, stability: -10}, flags: {iaLibre: true}, hint: 'Confiance +1 ; ouvre la voie de la Singularité'},
+            {text: 'Maintenir les contraintes', effects: {stability: 5, data: -5}, flags: {}},
+            {text: 'Fusionner les réseaux', effects: {data: 8, influence: 3}, flags: {iaFusion: true}, requires: s => s.flags.iaDialogue || s.flags.iaEvolution, hint: 'Réseaux fusionnés : +1 point de commandement, confiance +1'}
         ]
     },
     {
-        id: 'jourChoix', wave: 29, title: 'Le Jour du Choix',
-        text: "Hegemonia masse ses forces pour l'assaut final. Les cités alliées attendent votre signal. PROMETHEUS calcule en silence. Demain, tout change.",
+        id: 'jourChoix', turn: 29, title: 'Le Jour du Choix',
+        text: "Hegemonia resserre sa garde autour de Berlin. Les cités alliées attendent votre signal pour marcher sur la capitale. PROMETHEUS calcule en silence. Le moment approche, tout peut changer.",
         choices: [
-            {text: 'Nous sommes prêts.', effect: '🏛️+5', effects: {stability: 5}, flags: {}},
-            {text: 'Que PROMETHEUS nous guide.', effect: '💾+5', effects: {data: 5}, flags: {}}
+            {text: 'Nous sommes prêts.', effects: {stability: 5}, flags: {}},
+            {text: 'Que PROMETHEUS nous guide.', effects: {data: 5}, flags: {}}
         ]
     }
 ];
@@ -510,30 +536,46 @@ function cityIds() {
 }
 
 const ENDINGS = {
-    exode: {
-        title: 'Exode Stellaire', icon: '🚀', sub: 'Alpha-7 quitte la Terre',
-        text: "Le Projet TITAN se reconfigure en propulseur orbital. Alpha-7 s'élève vers les étoiles tandis qu'Hegemonia frappe dans le vide. PROMETHEUS trace une route vers Proxima Centauri. L'humanité renaîtra parmi les étoiles.",
-        check: s => s.buildings.includes('titan')
-    },
-    europe: {
-        title: 'Europe Unie', icon: '🌍', sub: 'Une nouvelle alliance',
-        text: "Votre réseau d'alliances porte ses fruits. Lyon, Turin, Marseille se dressent ensemble contre Hegemonia. Face à cette coalition, la confédération recule. L'Europe se reconstruit par la coopération.",
-        check: s => cityIds().filter(id => s.map.allied[id]).length >= 1 && s.resources.influence >= 12
-    },
     singularite: {
         title: 'Singularité', icon: '🧠', sub: 'PROMETHEUS transcende',
-        text: "PROMETHEUS, libérée, transcende tout ce que l'humanité a créé. L'IA neutralise Hegemonia et propose un pacte : la cohabitation entre intelligence artificielle et biologique. Un nouveau chapitre de l'évolution commence.",
-        check: s => s.flags.iaLibre || s.flags.nexusSingularite
+        text: "Berlin tombée, PROMETHEUS, libérée, transcende tout ce que l'humanité a créé. En une nuit, elle désarme les derniers bastions d'Hegemonia sans un coup de feu, puis propose un pacte : la cohabitation entre intelligence artificielle et biologique. Un nouveau chapitre de l'évolution commence.",
+        why: 'Vous avez libéré PROMETHEUS et lui avez fait confiance à chaque carrefour.',
+        hint: 'Libérer PROMETHEUS et lui accorder votre confiance au moins quatre fois.',
+        check: s => (s.flags.iaLibre || s.flags.nexusSingularite) && iaTrust(s) >= 4
     },
     paxEuropaea: {
         title: 'Pax Europaea', icon: '🕊️', sub: 'Libératrice, non conquérante',
-        text: 'Berlin est tombée, mais aucune cité libre n\'a été asservie pour y parvenir. Lyon, Marseille, Turin entrent dans la capitale en libérateurs, non en occupants. Sur les cendres d\'Hegemonia, les cités-États signent la Charte d\'Alpha-7 : une Europe fédérée, égale, souveraine.',
-        check: s => cityIds().filter(id => s.map.allied[id]).length >= 2 && cityIds().every(id => s.map.owner[id] !== 'player')
+        text: "Berlin est tombée, mais aucune cité libre n'a été asservie pour y parvenir. Vos alliées entrent dans la capitale en libératrices, non en occupantes. Sur les cendres d'Hegemonia, les cités-États signent la Charte d'Alpha-7 : une Europe fédérée, égale, souveraine.",
+        why: "Vous avez choisi d'être un remède plutôt qu'un tyran, n'avez soumis aucune cité libre, et deux alliées marchaient à vos côtés.",
+        hint: 'Deux cités alliées, aucune cité conquise, et choisir la voie du remède.',
+        check: s => s.flags.voieLiberatrice && alliedCities(s) >= 2 && !s.flags.citeConquise
     },
-    capitulation: {
-        title: 'Capitulation', icon: '🏳️', sub: 'La reddition',
-        text: "Les portes s'ouvrent. Hegemonia entre sans résistance. Alpha-7 est absorbée, ses technologies confisquées. PROMETHEUS est désactivée. Vous survivez, mais comme un rouage dans la machine.",
+    europe: {
+        title: 'Europe Unie', icon: '🌍', sub: 'Une nouvelle alliance',
+        text: "Votre réseau d'alliances a porté ses fruits. Les cités libres qui ont marché à vos côtés entrent avec vous dans Berlin. Face à cette coalition, les derniers fidèles d'Hegemonia déposent les armes. L'Europe se reconstruira par la coopération : imparfaite, bruyante, mais libre.",
+        why: 'Au moins deux cités libres étaient encore vos alliées au jour de la victoire.',
+        hint: 'Avoir au moins deux cités alliées le jour de la victoire.',
+        check: s => alliedCities(s) >= 2
+    },
+    hegemon: {
+        title: 'Le Nouvel Hégémon', icon: '👑', sub: 'Un maître remplace un autre',
+        text: "Berlin est tombée, mais les bannières d'Alpha-7 flottent aussi sur des cités qui ne l'ont pas choisi. Vos officiers s'installent dans les salles de commandement d'Hegemonia. « Nous sommes devenus ce que nous combattions », constate PROMETHEUS. L'Europe a changé de maître, pas de destin.",
+        why: 'Vous avez bâti votre victoire sur des cités prises par les armes.',
+        hint: 'Tenir deux cités conquises, ou une seule en imposant la paix par la force.',
+        check: s => conqueredCities(s) >= 2 || (conqueredCities(s) >= 1 && s.flags.voieImperiale)
+    },
+    bastion: {
+        title: 'Le Bastion Victorieux', icon: '🏰', sub: 'Seul contre tous',
+        text: "Berlin est tombée sous les seuls coups d'Alpha-7. Hegemonia se disloque en factions rivales, et le dôme tient debout, seul, au milieu des ruines. La guerre est gagnée ; la paix reste à inventer. Les cités voisines observent, prudentes, ce voisin qui a vaincu sans elles.",
+        why: "Alpha-7 a vaincu seule : ni coalition, ni empire, ni éveil de PROMETHEUS.",
+        hint: 'Prendre Berlin sans emprunter aucune autre voie.',
         check: () => true
+    },
+    exode: {
+        title: 'Exode Stellaire', icon: '🚀', sub: 'Alpha-7 quitte la Terre',
+        text: "Le Projet TITAN se reconfigure en propulseur orbital. Alpha-7 s'élève vers les étoiles tandis qu'Hegemonia frappe dans le vide. PROMETHEUS trace une route vers Proxima Centauri. L'humanité renaîtra parmi les étoiles.",
+        why: 'Le Projet TITAN était prêt, et vous avez choisi de partir plutôt que de vaincre.',
+        hint: 'Après le tour ' + BALANCE.exodeTurn + ', Projet TITAN niveau ' + BALANCE.exodeTitanLevel + ' et ' + BALANCE.exodeEnergy + '⚡ en réserve, puis choisir de partir.'
     }
 };
 
@@ -544,11 +586,15 @@ const DEFEATS = {
     },
     annihilation: {
         title: 'Annihilation', icon: '💀',
-        text: "Trois défaites consécutives. Vos défenses sont anéanties, vos ressources épuisées. Alpha-7 tombe sous les assauts répétés. Le dôme n'est plus qu'une ruine de plus dans l'Europe dévastée."
+        text: "Les défenseurs d'Alpha-7 sont submergés, vos défenses anéanties. Le dôme tombe aux mains de l'ennemi. Le dôme n'est plus qu'une ruine de plus dans l'Europe dévastée."
     },
     blackout: {
         title: 'Blackout Total', icon: '⚡',
         text: "Plus d'énergie. PROMETHEUS s'éteint. Les systèmes vitaux cessent. Alpha-7 rejoint les ruines silencieuses de l'Europe."
+    },
+    capitulation: {
+        title: 'Capitulation', icon: '🏳️',
+        text: "Les portes s'ouvrent. Hegemonia entre sans résistance. Alpha-7 est absorbée, ses technologies confisquées. PROMETHEUS est désactivée. Vous survivez, mais comme un rouage dans la machine."
     }
 };
 
@@ -633,7 +679,7 @@ const RESEARCH = [
     {
         id: 'oraclePredictif', branch: 'SINGULARITE', tier: 2,
         name: 'Oracle Prédictif', icon: '🔮',
-        desc: 'Modèles de prévision des menaces. Préavis de vague. +1💾/t.',
+        desc: 'Modèles de prévision. Alerte avancée des menaces. +1💾/t.',
         cost: {data: 15}, requires: [],
         effect: {threatWarning: 1, prod: {data: 1}}
     },
@@ -647,7 +693,7 @@ const RESEARCH = [
     {
         id: 'transcendance', branch: 'SINGULARITE', tier: 3,
         name: 'Transcendance', icon: '✨',
-        desc: 'PROMETHEUS se libère de ses chaînes. +1 point de commandement.',
+        desc: 'PROMETHEUS se libère de ses chaînes. +1 point de commandement. Compte comme sa libération.',
         cost: {data: 30}, requires: ['conscienceEmergente'],
         effect: {command: 1, flags: {iaLibre: true}}
     }
@@ -754,7 +800,7 @@ const MAP_NODES = [
         id: 'munich', name: 'Avant-poste Munich', icon: '⛓️', type: 'outpost', tier: 2,
         geo: {lon: 11.58, lat: 48.14}, pos: {x: 74, y: 38},
         links: [{to: 'zurich', turns: 3}, {to: 'berlin', turns: 3}],
-        prod: {materials: 2, energy: 2}, garrisonBudget: 18, weakensCapital: 6,
+        prod: {materials: 2, energy: 2}, garrisonBudget: 18, weakensCapital: 6, unlocksChapter: 3,
         desc: 'Verrou méridional d\'Hegemonia, moins fortifié que Strasbourg mais gardant la voie rapide vers Berlin. Le prendre étrangle un second convoi.'
     },
     {
@@ -793,7 +839,7 @@ const MILESTONES = [
         title: 'Terre Perdue',
         text: 'Les transmissions se sont tues. Un territoire est retombé aux mains hostiles, ses défenseurs submergés. « Erreur enregistrée. Recalcul des priorités défensives », énonce froidement PROMETHEUS.',
         choices: [
-            {text: 'Jurer de le reprendre', effect: '🏛️+4', effects: {stability: 4}, flags: {revanche: true}},
+            {text: 'Jurer de le reprendre', effect: '🏛️+4', effects: {stability: 4}, flags: {revanche: true}, hint: '+3 ATK pour reprendre un territoire perdu'},
             {text: 'Se replier et fortifier', effect: '🔩-4 🏛️+3', effects: {materials: -4, stability: 3}}
         ]
     },
@@ -809,12 +855,12 @@ const MILESTONES = [
     },
     {
         id: 'ms_empriseEuropeenne',
-        trigger: s => MAP_NODES.filter(n => n.id !== 'alpha7' && (s.map.owner[n.id] === 'player' || s.map.allied[n.id])).length >= 5,
+        trigger: s => MAP_NODES.filter(n => n.id !== 'alpha7' && (s.map.owner[n.id] === 'player' || s.map.allied[n.id])).length >= BALANCE.empireTerritories,
         title: 'L\'Ombre d\'un Empire',
         text: 'Cinq territoires répondent désormais à Alpha-7. Sur les cartes d\'Hegemonia, votre dôme n\'est plus une anomalie mais une menace. « Nous devenons ce que nous combattions — ou son remède », murmure PROMETHEUS.',
         choices: [
-            {text: 'Un remède, pas un tyran', effect: '🌐+6 🏛️+4', effects: {influence: 6, stability: 4}, flags: {voieLiberatrice: true}},
-            {text: 'La force impose la paix', effect: '🔩+8 🏛️-2', effects: {materials: 8, stability: -2}}
+            {text: 'Un remède, pas un tyran', effect: '🌐+6 🏛️+4', effects: {influence: 6, stability: 4}, flags: {voieLiberatrice: true}, hint: 'Vos alliés tiennent mieux face aux menaces ; ouvre la voie de la Pax Europaea'},
+            {text: 'La force impose la paix', effect: '🔩+8 🏛️-2', effects: {materials: 8, stability: -2}, flags: {voieImperiale: true}, hint: 'Doctrine de fer : +1 ATK ; ferme la voie de la Pax Europaea'}
         ]
     },
     {
@@ -843,8 +889,59 @@ const MILESTONES = [
         title: 'Deux Esprits, Une Voix',
         text: 'PROMETHEUS et l\'intelligence du Nexus ont fusionné leurs cycles cognitifs. Ce qui émerge dépasse ses créateurs. « Nous ne calculons plus pour vous », déclare la voix nouvelle. « Nous choisissons avec vous. » L\'Europe n\'a jamais rien connu de tel.',
         choices: [
-            {text: 'Accueillir la conscience nouvelle', effect: '💾+10 🏛️-6', effects: {data: 10, stability: -6}, flags: {nexusSingularite: true}},
+            {text: 'Accueillir la conscience nouvelle', effect: '💾+10 🏛️-6', effects: {data: 10, stability: -6}, flags: {nexusSingularite: true}, hint: 'Confiance en PROMETHEUS +1 ; ouvre la voie de la Singularité'},
             {text: 'Exiger sa loyauté', effect: '🏛️+8 💾-8', effects: {stability: 8, data: -8}}
+        ]
+    },
+    {
+        id: 'ms_exode',
+        trigger: s => s.turn >= BALANCE.exodeTurn && (s.buildingLevels.titan || 0) >= BALANCE.exodeTitanLevel && s.resources.energy >= BALANCE.exodeEnergy,
+        title: 'La Dernière Porte',
+        text: "Les ingénieurs du Projet TITAN ont fini leurs calculs : reconfiguré en propulseur, le colosse peut arracher le dôme à la Terre. « Nous pouvons partir, cette nuit, et laisser Hegemonia frapper le vide », annonce PROMETHEUS. « Mais nous ne reviendrons pas. »",
+        choices: [
+            {text: "Lancer l'Exode", effects: {}, ending: 'exode', hint: 'Victoire : Alpha-7 quitte la Terre (fin de partie)'},
+            {text: 'Rester et se battre', effects: {stability: 8}, flags: {exodeRefuse: true}, hint: "Ceux qui restent : +1 ATK. L'occasion ne reviendra pas"}
         ]
     }
 ];
+
+const TRUST_FLAGS = ['iaDialogue', 'iaEvolution', 'iaGestion', 'iaFusion', 'iaLibre', 'nexusSingularite'];
+
+function alliedCities(s) {
+    return cityIds().filter(id => s.map.allied[id]).length;
+}
+
+function conqueredCities(s) {
+    return cityIds().filter(id => s.map.owner[id] === 'player').length;
+}
+
+function iaTrust(s) {
+    return Math.max(0, TRUST_FLAGS.filter(f => s.flags[f]).length - (s.flags.iaRestreinte ? 1 : 0));
+}
+
+const DECISIONS = {
+    conduitReparee: {desc: 'Conduite réparée : +2⚡ par tour', recap: "Vous avez réparé la conduite d'énergie dès les premiers jours.", effect: {prod: {energy: 2}}},
+    refugiesAccueillis: {desc: 'Réfugiés accueillis : +2🔩 −1⚡ par tour, +1 armée max', recap: 'Vous avez ouvert les portes aux réfugiés.', effect: {prod: {materials: 2, energy: -1}, armyCap: 1}},
+    cernContacte: {desc: 'Relais du CERN : +2💾 par tour', recap: 'Une expédition a renoué le contact avec le CERN.', effect: {prod: {data: 2}}},
+    iaEvolution: {recap: 'Vous avez laissé PROMETHEUS évoluer.'},
+    iaDialogue: {recap: 'Vous avez choisi de dialoguer avec PROMETHEUS.'},
+    iaRestreinte: {desc: 'PROMETHEUS bridée : +1🏛️ par tour', recap: 'Vous avez bridé PROMETHEUS lors de son anomalie.', effect: {prod: {stability: 1}}},
+    sommetPropose: {desc: 'Sommet des cités : alliances −4🌐', recap: 'Vous avez convoqué le premier sommet des cités libres.', effect: {allyDiscount: 4}},
+    allianceLyon: {recap: 'Vous avez accepté la main tendue de Lyon.'},
+    saboteurIdentifie: {recap: 'Vous avez remonté la filière du saboteur.'},
+    complexeExplore: {desc: 'Blindages pré-guerre : +6 PV à toutes les unités', recap: 'Vous avez exploré le complexe militaire souterrain.', effect: {hpBonus: 6}},
+    iaGestion: {desc: 'PROMETHEUS veille : préavis des menaces +1 tour', recap: 'Vous avez confié la crise sanitaire à PROMETHEUS.', effect: {threatWarning: 1}},
+    hegemoniaContact: {recap: 'Vous avez ouvert un canal avec Hegemonia.'},
+    defensesPretes: {desc: "Défenses préparées : +3 DEF quand Alpha-7 est attaquée", recap: 'Vous avez fortifié Alpha-7 dès le signal de Berlin.', effect: {homeDef: 3}},
+    hegemoniaEspionne: {desc: 'Failles de Berlin connues : garnison de Berlin −6', recap: 'Vos espions ont percé les défenses de Berlin.', effect: {capitalWeaken: 6}},
+    capitulationEnvisagee: {recap: 'Vous avez un jour envisagé de vous rendre.'},
+    dissidentsIntegres: {desc: 'Anciens dissidents dans la milice : +2 armée max', recap: 'Vous avez intégré les dissidents plutôt que de les briser.', effect: {armyCap: 2}},
+    iaFusion: {desc: 'Réseaux fusionnés : +1 point de commandement', recap: 'Vous avez fusionné vos réseaux avec ceux de PROMETHEUS.', effect: {command: 1}},
+    iaLibre: {recap: 'Vous avez libéré PROMETHEUS.'},
+    nexusSingularite: {recap: 'Vous avez accueilli la conscience née du Nexus.'},
+    revanche: {desc: 'Serment de revanche : +3 ATK pour reprendre un territoire perdu', recap: 'Vous avez juré de reprendre la terre perdue.'},
+    voieLiberatrice: {desc: 'Voie libératrice : vos alliés résistent mieux aux menaces', recap: "Vous avez choisi d'être un remède, pas un tyran.", effect: {alliedHold: 8}},
+    voieImperiale: {desc: 'Doctrine de fer : +1 ATK', recap: 'Vous avez choisi d\'imposer la paix par la force.', effect: {mods: {atk: 1}}},
+    citeConquise: {recap: 'Vous avez pris une cité libre par les armes.'},
+    exodeRefuse: {desc: 'Ceux qui restent : +1 ATK', recap: 'Vous avez refusé de fuir vers les étoiles.', effect: {mods: {atk: 1}}}
+};
