@@ -105,6 +105,7 @@ function positionTooltip(el) {
 function initKeys() {
     document.addEventListener('keydown', e => {
         if (e.key !== 'Escape') return;
+        if (document.getElementById('confirm-overlay').classList.contains('active')) return closeConfirm();
         const rs = document.getElementById('research-overlay');
         if (rs.classList.contains('active')) return toggleResearch();
         if (openDrawer) return toggleDrawer(openDrawer);
@@ -584,4 +585,58 @@ function renderResearch() {
         return col + '</div>';
     }).join('');
     overlay.innerHTML = `<div id="research-modal" class="plate"><div class="dr-head"><div><div class="eyebrow">Savoir · Cœur niveau ${state.core}</div><h2>Cortex de PROMETHEUS</h2></div><button class="dr-close" onclick="toggleResearch()" aria-label="Fermer">${ic('x')}</button></div><div class="rs-cols">${cols}</div></div>`;
+}
+
+function timeAgo(ts) {
+    if (!ts) return '';
+    const min = Math.round((Date.now() - ts) / 60000);
+    if (min < 1) return 'à l\'instant';
+    if (min < 60) return 'il y a ' + min + ' min';
+    const h = Math.round(min / 60);
+    if (h < 24) return 'il y a ' + h + ' h';
+    const d = Math.round(h / 24);
+    return 'il y a ' + d + ' jour' + (d > 1 ? 's' : '');
+}
+
+function saveSummary(s) {
+    const ch = CHAPTERS[(s.chapter || 1) - 1] || CHAPTERS[0];
+    return `Tour ${s.turn || 1} · Chapitre ${['', 'I', 'II', 'III'][ch.num]} · ${ch.name.charAt(0) + ch.name.slice(1).toLowerCase()}`;
+}
+
+function renderSaveInfo(s) {
+    const el = document.getElementById('save-info');
+    if (!el) return;
+    if (!s) {
+        el.innerHTML = '';
+        return;
+    }
+    el.innerHTML = `${ic('floppy-disk')}<span><b>Campagne en cours</b> · ${saveSummary(s)}<small>${s.savedAt ? 'Sauvegardée ' + timeAgo(s.savedAt) + ' sur ce navigateur' : 'Sauvegardée sur ce navigateur'}</small></span>`;
+}
+
+function showNewGameConfirm(s) {
+    const ov = document.getElementById('confirm-overlay');
+    ov.innerHTML = `<div class="confirm-box plate" role="alertdialog" aria-labelledby="cf-title"><div class="eyebrow">Nouvelle campagne</div><h2 id="cf-title">Abandonner la campagne en cours ?</h2><div class="rule"></div><p>Il n'existe qu'une sauvegarde. Commencer une nouvelle campagne effacera définitivement celle-ci :</p><div class="fact">${ic('floppy-disk')}<span class="fact-l">${saveSummary(s)}</span><span class="force">${s.savedAt ? timeAgo(s.savedAt) : ''}</span></div><div class="confirm-actions"><button class="btn btn-primary" onclick="closeConfirm();continueGame()">${ic('play')}Reprendre</button><button class="btn btn-danger" onclick="closeConfirm();newGame()">${ic('warning')}Tout effacer</button></div></div>`;
+    ov.onclick = e => {
+        if (e.target === ov) closeConfirm();
+    };
+    ov.classList.add('active');
+    ov.querySelector('.btn-primary').focus();
+}
+
+function closeConfirm() {
+    const ov = document.getElementById('confirm-overlay');
+    ov.classList.remove('active');
+    ov.innerHTML = '';
+}
+
+let savedTimer = null;
+
+function flashSaved() {
+    const el = document.getElementById('save-flag');
+    if (!el || !document.getElementById('game-screen').classList.contains('active')) return;
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => el.classList.remove('show'), 1600);
 }

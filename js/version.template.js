@@ -1,1 +1,1 @@
-const VersionTemplate = "__APP_VERSION__";
+const VERSION = "__APP_VERSION__";

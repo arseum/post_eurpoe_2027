@@ -43,7 +43,17 @@ function defaultState() {
 }
 
 function save() {
+    state.savedAt = Date.now();
     localStorage.setItem('pe2147', JSON.stringify(state));
+    if (typeof flashSaved === 'function') flashSaved();
+}
+
+function readSave() {
+    try {
+        return JSON.parse(localStorage.getItem('pe2147'));
+    } catch (e) {
+        return null;
+    }
 }
 
 function hasSave() {
@@ -1195,7 +1205,16 @@ function showScreen(id) {
 }
 
 function checkContinue() {
-    document.getElementById('btn-continue').style.display = hasSave() ? '' : 'none';
+    const s = hasSave() ? readSave() : null;
+    document.getElementById('btn-continue').style.display = s ? '' : 'none';
+    document.getElementById('btn-new').className = 'btn ' + (s ? 'btn-ghost' : 'btn-primary');
+    renderSaveInfo(s);
+}
+
+function askNewGame() {
+    const s = hasSave() ? readSave() : null;
+    if (!s) return newGame();
+    showNewGameConfirm(s);
 }
 
 function setSpeed(s) {

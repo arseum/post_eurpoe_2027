@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=Marcellus+SC&display=swap">
     <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css">
     <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
-    <link rel="stylesheet" href="style.css?v=45">
+    <link rel="stylesheet" href="style.css?v=46">
     <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
     </script>
@@ -25,9 +25,10 @@
         <h1>Post-Europe<span>2147</span></h1>
         <p class="pitch">Sous le dôme d'Alpha-7, PROMETHEUS s'éveille. Rallie ou soumets les cités libres, brise les verrous d'Hegemonia et marche sur Berlin.</p>
         <div class="menu-buttons">
-            <button class="btn btn-primary" onclick="newGame()"><i class="ph-duotone ph-flag-banner"></i>Nouvelle campagne</button>
-            <button class="btn btn-ghost" id="btn-continue" onclick="continueGame()">Continuer</button>
+            <button class="btn btn-primary" id="btn-continue" onclick="continueGame()"><i class="ph-duotone ph-play"></i>Continuer</button>
+            <button class="btn btn-primary" id="btn-new" onclick="askNewGame()"><i class="ph-duotone ph-flag-banner"></i>Nouvelle campagne</button>
         </div>
+        <div id="save-info"></div>
         <button id="opt-guide" class="switch on" role="switch" aria-checked="true" onclick="toggleGuideOption()">
             <span class="sw-track"><span class="sw-knob"></span></span>
             <span class="sw-label"><b>Guide de PROMETHEUS</b><small>Vous accompagne pendant les premiers tours</small></span>
@@ -49,6 +50,7 @@
         <div id="res-plates"></div>
         <div id="turn-cartouche"></div>
         <div id="cmd" class="build-only"></div>
+        <div id="save-flag" class="build-only"><i class="ph-duotone ph-floppy-disk"></i>Sauvegardé</div>
     </header>
 
     <nav id="rail" class="hud build-only" aria-label="Royaume">
@@ -96,21 +98,22 @@
 <div id="event-overlay" class="overlay"></div>
 <div id="chapter-overlay" class="overlay"></div>
 <div id="research-overlay" class="overlay"></div>
+<div id="confirm-overlay" class="overlay"></div>
 <div id="phase-fade"></div>
 <div id="end-screen" class="screen">
     <div id="end-content" class="plate"></div>
 </div>
 
-<script type="module" src="js/scene3d.js?v=45"></script>
-<script type="module" src="js/base3d.js?v=45"></script>
-<script type="module" src="js/map3d.js?v=45"></script>
-<script type="module" src="js/fx3d.js?v=45"></script>
-<script src="js/version.js?v=45"></script>
-<script src="js/geo-europe.js?v=45"></script>
-<script src="js/data.js?v=45"></script>
-<script src="js/game.js?v=45"></script>
-<script src="js/render.js?v=45"></script>
-<script src="js/guide.js?v=45"></script>
+<script type="module" src="js/scene3d.js?v=46"></script>
+<script type="module" src="js/base3d.js?v=46"></script>
+<script type="module" src="js/map3d.js?v=46"></script>
+<script type="module" src="js/fx3d.js?v=46"></script>
+<script src="js/version.js?v=46"></script>
+<script src="js/geo-europe.js?v=46"></script>
+<script src="js/data.js?v=46"></script>
+<script src="js/game.js?v=46"></script>
+<script src="js/render.js?v=46"></script>
+<script src="js/guide.js?v=46"></script>
 <script>
     initTooltip();
     initKeys();
