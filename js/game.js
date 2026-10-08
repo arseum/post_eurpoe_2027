@@ -15,7 +15,9 @@ function makeMap() {
         lost: {},
         lastThreatTurn: 0,
         berlinWeakened: 0,
-        transferTurn: 0
+        transferTurn: 0,
+        raided: {},
+        fallenAllies: {}
     };
 }
 
@@ -49,32 +51,32 @@ function defaultState() {
     };
 }
 
+const SAVE_KEY = 'pe2147';
+
 function save() {
+    if (state.phase !== 'build' || endTurnBusy) return;
     state.savedAt = Date.now();
-    localStorage.setItem('pe2147', JSON.stringify(state));
-    if (typeof flashSaved === 'function') flashSaved();
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    flashSaved();
 }
 
 function readSave() {
     try {
-        return JSON.parse(localStorage.getItem('pe2147'));
+        return JSON.parse(localStorage.getItem(SAVE_KEY));
     } catch (e) {
         return null;
     }
 }
 
-function hasSave() {
-    return !!localStorage.getItem('pe2147');
-}
-
 function deleteSave() {
-    localStorage.removeItem('pe2147');
+    localStorage.removeItem(SAVE_KEY);
 }
 
 function loadSave() {
     try {
-        state = JSON.parse(localStorage.getItem('pe2147'));
+        state = readSave();
         if (!state) return false;
+        state.phase = 'build';
         if (!DIFFICULTIES[state.difficulty]) state.difficulty = 'normal';
         applyDifficulty(state.difficulty);
         if (!state.buildingLevels) state.buildingLevels = {};
@@ -89,7 +91,7 @@ function loadSave() {
         if (state.retreatAt === undefined) state.retreatAt = BALANCE.retreatDefault;
         if (!state.map) {
             state.map = makeMap();
-            state.turn = state.turn || 1;
+            state.turn = state.turn || state.wave || 1;
             state.command = getCommandMax();
             state.version = 2;
         }
@@ -101,6 +103,8 @@ function loadSave() {
             state.map.weakenedBy = {};
             if (state.map.outpostBonusDone) state.map.weakenedBy.outpost = true;
         }
+        if (!state.map.raided) state.map.raided = {};
+        if (!state.map.fallenAllies) state.map.fallenAllies = {};
         return true;
     } catch (e) {
         return false;
@@ -123,6 +127,14 @@ function spendCommand(n) {
 
 function getNode(id) {
     return MAP_NODES.find(n => n.id === id);
+}
+
+function getUnit(id) {
+    return UNITS.find(u => u.id === id);
+}
+
+function isHeld(id, s = state) {
+    return s.map.owner[id] === 'player' || !!s.map.allied[id];
 }
 
 function linkTurns(a, b) {
@@ -219,11 +231,11 @@ function battleSfx(ev) {
 
 function addLog(t, c = '') {
     state.log.push({text: t, cls: c});
-    if (state.phase === 'build' && !endTurnBusy && typeof toast === 'function') toast(t, c);
+    if (state.phase === 'build' && !endTurnBusy) toast(t, c);
 }
 
-function pulseNode(id, color) {
-    if (window.Map3D && Map3D.pulse) Map3D.pulse(id, color);
+function pulseNode(id, status) {
+    if (window.Map3D) Map3D.pulse(id, status);
 }
 
 function clampRes() {
@@ -279,7 +291,10 @@ function generateForce(budget, seed) {
 }
 
 function getForcePreview(budget, seed) {
-    const units = generateForce(budget, seed);
+    return forceCounts(generateForce(budget, seed));
+}
+
+function forceCounts(units) {
     const counts = {};
     units.forEach(u => {
         if (!counts[u.id]) counts[u.id] = {...u, count: 0};
@@ -338,7 +353,7 @@ function doResearch(id) {
     sfx('research');
     save();
     render();
-    if (typeof renderResearch === 'function') renderResearch();
+    renderResearch();
 }
 
 function getHeroSlots() {
@@ -415,15 +430,11 @@ function getCombatMods() {
     return mods;
 }
 
-function buildPlayerUnits() {
-    return buildUnitsFrom(state.army, 'p');
-}
-
 function buildUnitsFrom(ids, prefix) {
     const mods = getCombatMods();
     const hpBonus = activeEffects().hpBonus;
     return ids.map((id, i) => {
-        const d = UNITS.find(u => u.id === id);
+        const d = getUnit(id);
         return {
             uid: prefix + i,
             id: d.id,
@@ -540,71 +551,70 @@ function simulateBattle(playerUnits, enemyUnits, opts = {}) {
     };
 }
 
-async function playBattle(sim) {
-    battleState = {player: sim.initial.player, enemy: sim.initial.enemy, log: [], round: 0};
+function startBattleState(sim, mode) {
+    battleState = {player: sim.initial.player, enemy: sim.initial.enemy, log: [], round: 0, mode};
     const byUid = {};
     [...battleState.player, ...battleState.enemy].forEach(u => byUid[u.uid] = u);
+    return byUid;
+}
+
+function applyBattleEvent(ev, byUid) {
+    const log = (text, type) => battleState.log.push({text, type});
+    const src = byUid[ev.src], tgt = byUid[ev.tgt];
+    if (ev.t === 'round') {
+        battleState.round = ev.round;
+    } else if (ev.t === 'dodge') {
+        log(src.icon + ' → ' + tgt.icon + ' Esquivé !', 'dodge');
+    } else if (ev.t === 'attack') {
+        tgt.hp = ev.hp;
+        log(src.icon + ' ' + src.name + ' → ' + tgt.icon + ' ' + tgt.name + ' -' + ev.dmg + ' PV' + (ev.kill ? ' ☠️' : ''), ev.kill ? 'kill' : 'hit');
+    } else if (ev.t === 'ability' && ev.kind === 'aura') {
+        log(src.icon + ' Aura de Calcul — +2 ATK pour les alliés', 'heal');
+    } else if (ev.t === 'ability' && ev.kind === 'cleave') {
+        const tgt2 = byUid[ev.tgt2];
+        tgt.hp = ev.hp;
+        tgt2.hp = ev.hp2;
+        log(src.icon + ' ' + src.name + ' Frappe Croisée → ' + tgt.icon + ' -' + ev.dmg + ' PV' + (ev.kill ? ' ☠️' : '') + ' / ' + tgt2.icon + ' -' + ev.dmg2 + ' PV' + (ev.kill2 ? ' ☠️' : ''), (ev.kill || ev.kill2) ? 'kill' : 'hit');
+    } else if (ev.t === 'retreat') {
+        log('🏳️ Repli ordonné — les survivants rompent le combat', 'dodge');
+    } else if (ev.t === 'roundEnd') {
+        for (const h of ev.heals) {
+            const u = byUid[h.uid];
+            u.hp = h.hp;
+            log(u.icon + ' +' + h.amount + ' PV', 'heal');
+        }
+    }
+}
+
+async function playBattle(sim) {
+    const byUid = startBattleState(sim, '2d');
     renderBattle();
     await delay(600 / battleSpeed);
 
     for (const ev of sim.events) {
         battleSfx(ev);
-        if (ev.t === 'round') {
-            battleState.round = ev.round;
-        } else if (ev.t === 'dodge') {
-            const src = byUid[ev.src], tgt = byUid[ev.tgt];
-            battleState.log.push({text: src.icon + ' → ' + tgt.icon + ' Esquivé !', type: 'dodge'});
-            renderBattle();
-            showFloat(tgt.uid, 'Esquivé', 'dodge');
+        applyBattleEvent(ev, byUid);
+        if (ev.t === 'round') continue;
+        renderBattle();
+        if (ev.t === 'dodge') {
+            showFloat(ev.tgt, 'Esquivé', 'dodge');
             await delay(300 / battleSpeed);
-        } else if (ev.t === 'attack') {
-            const src = byUid[ev.src], tgt = byUid[ev.tgt];
-            tgt.hp = ev.hp;
-            battleState.log.push({
-                text: src.icon + ' ' + src.name + ' → ' + tgt.icon + ' ' + tgt.name + ' -' + ev.dmg + ' PV' + (ev.kill ? ' ☠️' : ''),
-                type: ev.kill ? 'kill' : 'hit'
-            });
-            renderBattle();
-            highlightCard(src.uid, 'attacking');
-            highlightCard(tgt.uid, 'hit');
-            showFloat(tgt.uid, '-' + ev.dmg, 'damage');
-            await delay(350 / battleSpeed);
-            clearHighlights();
-        } else if (ev.t === 'ability') {
-            if (ev.kind === 'aura') {
-                const src = byUid[ev.src];
-                battleState.log.push({text: src.icon + ' Aura de Calcul — +2 ATK pour les alliés', type: 'heal'});
-                renderBattle();
-                await delay(300 / battleSpeed);
-            } else if (ev.kind === 'cleave') {
-                const src = byUid[ev.src], tgt = byUid[ev.tgt], tgt2 = byUid[ev.tgt2];
-                tgt.hp = ev.hp;
-                tgt2.hp = ev.hp2;
-                battleState.log.push({
-                    text: src.icon + ' ' + src.name + ' Frappe Croisée → ' + tgt.icon + ' -' + ev.dmg + ' PV' + (ev.kill ? ' ☠️' : '') + ' / ' + tgt2.icon + ' -' + ev.dmg2 + ' PV' + (ev.kill2 ? ' ☠️' : ''),
-                    type: (ev.kill || ev.kill2) ? 'kill' : 'hit'
-                });
-                renderBattle();
-                highlightCard(src.uid, 'attacking');
-                highlightCard(tgt.uid, 'hit');
-                highlightCard(tgt2.uid, 'hit');
-                showFloat(tgt.uid, '-' + ev.dmg, 'damage');
-                showFloat(tgt2.uid, '-' + ev.dmg2, 'damage');
-                await delay(400 / battleSpeed);
-                clearHighlights();
+        } else if (ev.t === 'attack' || ev.kind === 'cleave') {
+            highlightCard(ev.src, 'attacking');
+            highlightCard(ev.tgt, 'hit');
+            showFloat(ev.tgt, '-' + ev.dmg, 'damage');
+            if (ev.tgt2) {
+                highlightCard(ev.tgt2, 'hit');
+                showFloat(ev.tgt2, '-' + ev.dmg2, 'damage');
             }
+            await delay((ev.tgt2 ? 400 : 350) / battleSpeed);
+            clearHighlights();
+        } else if (ev.kind === 'aura') {
+            await delay(300 / battleSpeed);
         } else if (ev.t === 'retreat') {
-            battleState.log.push({text: '🏳️ Repli ordonné — les survivants rompent le combat', type: 'dodge'});
-            renderBattle();
             await delay(500 / battleSpeed);
         } else if (ev.t === 'roundEnd') {
-            for (const h of ev.heals) {
-                const u = byUid[h.uid];
-                u.hp = h.hp;
-                battleState.log.push({text: u.icon + ' +' + h.amount + ' PV', type: 'heal'});
-                showFloat(u.uid, '+' + h.amount, 'heal');
-            }
-            renderBattle();
+            for (const h of ev.heals) showFloat(h.uid, '+' + h.amount, 'heal');
             await delay(200 / battleSpeed);
         }
     }
@@ -612,65 +622,23 @@ async function playBattle(sim) {
     await showResult(sim.won, sim.retreated);
 }
 
+const BATTLE3D_MS = {dodge: 340, attack: 420, aura: 500, cleave: 460, roundEnd: 200};
+
 async function playBattle3D(sim) {
-    battleState = {player: sim.initial.player, enemy: sim.initial.enemy, log: [], round: 0, mode: '3d'};
+    const byUid = startBattleState(sim, '3d');
     renderBattle();
     await Battle3D.ready();
     Battle3D.mount(document.getElementById('battle3d-view'));
     Battle3D.setup(battleState.player, battleState.enemy);
-    const byUid = {};
-    [...battleState.player, ...battleState.enemy].forEach(u => byUid[u.uid] = u);
     await delay(600 / battleSpeed);
 
     for (const ev of sim.events) {
         battleSfx(ev);
-        if (ev.t === 'round') {
-            battleState.round = ev.round;
-            renderBattle();
-        } else if (ev.t === 'dodge') {
-            const src = byUid[ev.src], tgt = byUid[ev.tgt];
-            battleState.log.push({text: src.icon + ' → ' + tgt.icon + ' Esquivé !', type: 'dodge'});
-            renderBattle();
-            await Battle3D.play(ev, 340 / battleSpeed);
-        } else if (ev.t === 'attack') {
-            const src = byUid[ev.src], tgt = byUid[ev.tgt];
-            tgt.hp = ev.hp;
-            battleState.log.push({
-                text: src.icon + ' ' + src.name + ' → ' + tgt.icon + ' ' + tgt.name + ' -' + ev.dmg + ' PV' + (ev.kill ? ' ☠️' : ''),
-                type: ev.kill ? 'kill' : 'hit'
-            });
-            renderBattle();
-            await Battle3D.play(ev, 420 / battleSpeed);
-        } else if (ev.t === 'ability') {
-            const src = byUid[ev.src];
-            if (ev.kind === 'aura') {
-                battleState.log.push({text: src.icon + ' Aura de Calcul — +2 ATK pour les alliés', type: 'heal'});
-                renderBattle();
-                await Battle3D.play(ev, 500 / battleSpeed);
-            } else if (ev.kind === 'cleave') {
-                const tgt = byUid[ev.tgt], tgt2 = byUid[ev.tgt2];
-                tgt.hp = ev.hp;
-                tgt2.hp = ev.hp2;
-                battleState.log.push({
-                    text: src.icon + ' ' + src.name + ' Frappe Croisée → ' + tgt.icon + ' -' + ev.dmg + ' PV' + (ev.kill ? ' ☠️' : '') + ' / ' + tgt2.icon + ' -' + ev.dmg2 + ' PV' + (ev.kill2 ? ' ☠️' : ''),
-                    type: (ev.kill || ev.kill2) ? 'kill' : 'hit'
-                });
-                renderBattle();
-                await Battle3D.play(ev, 460 / battleSpeed);
-            }
-        } else if (ev.t === 'retreat') {
-            battleState.log.push({text: '🏳️ Repli ordonné — les survivants rompent le combat', type: 'dodge'});
-            renderBattle();
-            await delay(500 / battleSpeed);
-        } else if (ev.t === 'roundEnd') {
-            for (const h of ev.heals) {
-                const u = byUid[h.uid];
-                u.hp = h.hp;
-                battleState.log.push({text: u.icon + ' +' + h.amount + ' PV', type: 'heal'});
-            }
-            renderBattle();
-            await Battle3D.play(ev, 200 / battleSpeed);
-        }
+        applyBattleEvent(ev, byUid);
+        renderBattle();
+        const ms = BATTLE3D_MS[ev.t === 'ability' ? ev.kind : ev.t];
+        if (ev.t === 'retreat') await delay(500 / battleSpeed);
+        else if (ms) await Battle3D.play(ev, ms / battleSpeed);
     }
 
     await showResult(sim.won, sim.retreated);
@@ -746,7 +714,7 @@ function buildBuilding(id) {
 }
 
 function recruitUnit(id) {
-    const u = UNITS.find(x => x.id === id);
+    const u = getUnit(id);
     if (!u || !canAfford(u.cost)) return;
     if (!u.always && u.building && !isBuilt(u.building)) return;
     const atHome = state.map.armyAt === 'alpha7' && !state.map.armyDest;
@@ -789,7 +757,7 @@ function transferToArmy(idx) {
     if (!at || state.map.armyDest || state.map.owner[at] !== 'player') return;
     const g = state.map.garrisons[at] || [];
     if (idx < 0 || idx >= g.length) return;
-    const u = UNITS.find(x => x.id === g[idx]);
+    const u = getUnit(g[idx]);
     if (!u || getArmySize() + u.size > getArmyCap()) return;
     if (!payTransfer()) return;
     state.army.push(g.splice(idx, 1)[0]);
@@ -803,7 +771,7 @@ function departArmy(dest, isAttack, leave = []) {
     if (state.army.length === 0) return;
     const t = linkTurns(m.armyAt, dest);
     if (!t) return;
-    const friendly = m.owner[dest] === 'player' || m.allied[dest];
+    const friendly = isHeld(dest);
     if (isAttack === friendly) return;
     const canLeave = m.owner[m.armyAt] === 'player';
     const kept = canLeave ? leave.filter(i => i >= 0 && i < state.army.length) : [];
@@ -824,7 +792,7 @@ function departArmy(dest, isAttack, leave = []) {
     addLog((isAttack ? '⚔️ Assaut lancé sur ' : '🚚 Armée en route vers ') + node.name + ' — ' + t + ' tour(s)', isAttack ? 'warning' : '');
     save();
     render();
-    pulseNode(dest, isAttack ? 0xc8473c : 0x0ac8b9);
+    pulseNode(dest, isAttack ? 'hostile' : 'player');
 }
 
 function moveArmy(dest) {
@@ -841,7 +809,7 @@ function setRetreat(v) {
 }
 
 function getAllyCost(node) {
-    const raids = (state.map.raided && state.map.raided[node.id]) || 0;
+    const raids = state.map.raided[node.id] || 0;
     return Math.max(BALANCE.allyMinCost, node.allyCost - activeEffects().allyDiscount - raids * BALANCE.raidAllyDiscount);
 }
 
@@ -849,15 +817,16 @@ function allyCity(id) {
     const m = state.map;
     const node = getNode(id);
     if (!node || node.type !== 'city' || m.owner[id] !== 'neutral' || m.allied[id]) return;
-    if ((state.resources.influence || 0) < getAllyCost(node)) return;
+    const cost = getAllyCost(node);
+    if ((state.resources.influence || 0) < cost) return;
     if (!spendCommand(1)) return;
-    state.resources.influence -= getAllyCost(node);
+    state.resources.influence -= cost;
     m.allied[id] = true;
     addLog('🤝 Alliance scellée avec ' + node.name, 'chapter');
     sfx('alliance');
     save();
     render();
-    pulseNode(id, 0x5fb37e);
+    pulseNode(id, 'allied');
 }
 
 function fortifyNode(id) {
@@ -868,7 +837,7 @@ function fortifyNode(id) {
     addLog('🧱 ' + getNode(id).name + ' fortifié — +' + BALANCE.fortifyDef + ' DEF au prochain combat', 'build');
     save();
     render();
-    pulseNode(id, 0xc8aa6e);
+    pulseNode(id, 'neutral');
 }
 
 function getChapterFromMap() {
@@ -876,7 +845,7 @@ function getChapterFromMap() {
     let ch = 1;
     for (const node of MAP_NODES) {
         if (!node.unlocksChapter) continue;
-        if (m.owner[node.id] === 'player' || m.allied[node.id]) ch = Math.max(ch, node.unlocksChapter);
+        if (isHeld(node.id)) ch = Math.max(ch, node.unlocksChapter);
     }
     return ch;
 }
@@ -884,7 +853,7 @@ function getChapterFromMap() {
 function dismissUnit(idx) {
     if (idx < 0 || idx >= state.army.length) return;
     const id = state.army[idx];
-    const u = UNITS.find(x => x.id === id);
+    const u = getUnit(id);
     state.army.splice(idx, 1);
     addLog(u.icon + ' ' + u.name + ' libéré', '');
     save();
@@ -894,7 +863,7 @@ function dismissUnit(idx) {
 function dismissGarrison(nodeId, idx) {
     const g = state.map.garrisons[nodeId] || [];
     if (idx < 0 || idx >= g.length) return;
-    const u = UNITS.find(x => x.id === g[idx]);
+    const u = getUnit(g[idx]);
     g.splice(idx, 1);
     addLog(u.icon + ' ' + u.name + ' libéré de la garnison de ' + getNode(nodeId).name, '');
     save();
@@ -917,7 +886,7 @@ function phaseSwitch(cb) {
 
 function sizeOf(ids) {
     return ids.reduce((s, id) => {
-        const u = UNITS.find(x => x.id === id);
+        const u = getUnit(id);
         return s + (u ? u.size : 1);
     }, 0);
 }
@@ -932,7 +901,7 @@ function getCampaignProduction() {
     const m = state.map;
     for (const node of MAP_NODES) {
         if (node.id === 'alpha7') continue;
-        if (m.owner[node.id] === 'player' || m.allied[node.id]) {
+        if (isHeld(node.id)) {
             for (const [k, v] of Object.entries(node.prod)) p[k] += v;
         }
     }
@@ -992,7 +961,7 @@ async function resolveCombat(c) {
         sim = await runBattle(attackers, defenders, {retreatAt: state.retreatAt});
         battleState = null;
         tallyCombat(sim, sim.won ? 'assaultsWon' : sim.retreated ? 'retreats' : 'assaultsLost');
-        if (sim.won && m.fallenAllies && m.fallenAllies[c.node]) {
+        if (sim.won && m.fallenAllies[c.node]) {
             m.owner[c.node] = 'neutral';
             m.allied[c.node] = true;
             delete m.fallenAllies[c.node];
@@ -1025,13 +994,12 @@ async function resolveCombat(c) {
             }
             if (node.type === 'capital') {
                 clampRes();
-                save();
                 showEnding(resolveEnding());
                 return true;
             }
         } else if (sim.retreated) {
             state.army = survivorsOf(sim, 'a');
-            m.armyAt = m.armyFrom && (m.owner[m.armyFrom] === 'player' || m.allied[m.armyFrom]) ? m.armyFrom : 'alpha7';
+            m.armyAt = m.armyFrom && isHeld(m.armyFrom) ? m.armyFrom : 'alpha7';
             state.resources.stability -= BALANCE.retreatStability;
             addLog('🏳️ Repli devant ' + node.name + ' : ' + state.army.length + ' unité(s) regagnent ' + getNode(m.armyAt).name + ', -' + BALANCE.retreatStability + '🏛️', 'warning');
         } else {
@@ -1097,7 +1065,6 @@ async function resolveCombat(c) {
     }
     state.phase = 'build';
     clampRes();
-    save();
     await phaseSwitch(() => render());
     return false;
 }
@@ -1111,7 +1078,6 @@ function allyFalls(node) {
     delete m.allied[node.id];
     m.owner[node.id] = 'hostile';
     m.lost[node.id] = true;
-    if (!m.fallenAllies) m.fallenAllies = {};
     m.fallenAllies[node.id] = true;
     state.resources.influence -= BALANCE.allyFallInfluence;
     addLog('🔥 ' + node.name + ' (allié) est tombé aux mains d\'Hegemonia — -' + BALANCE.allyFallInfluence + '🌐. Reprenez-la pour la libérer', 'warning');
@@ -1123,28 +1089,26 @@ function alliedHolds(th) {
     return simulateBattle(militia, generateForce(th.budget, th.seed)).won;
 }
 
-function resolveAlliedDefense(th) {
+function resolveAlliedDefense(th, holds = alliedHolds(th)) {
     const node = getNode(th.nodeId);
-    if (!alliedHolds(th)) allyFalls(node);
+    if (!holds) allyFalls(node);
     else addLog('🛡️ ' + node.name + ' (allié) a repoussé la menace seul', 'build');
 }
 
 function resolveRaid(th) {
     const m = state.map;
     const node = getNode(th.nodeId);
-    if (!m.raided) m.raided = {};
     m.raided[node.id] = (m.raided[node.id] || 0) + 1;
     addLog('⚔️ Hegemonia a razzié ' + node.name + ' — la cité cherche des alliés : alliance −' + BALANCE.raidAllyDiscount + '🌐', 'warning');
 }
 
-function allyNeedsArmy(th) {
+function armyGuards(nodeId) {
     const m = state.map;
-    return m.armyAt === th.nodeId && !m.armyDest && state.army.length > 0 && !alliedHolds(th);
+    return m.armyAt === nodeId && !m.armyDest && state.army.length > 0;
 }
 
-function heldTerritories() {
-    const m = state.map;
-    return MAP_NODES.filter(n => n.id !== 'alpha7' && (m.owner[n.id] === 'player' || m.allied[n.id])).length;
+function heldTerritories(s = state) {
+    return MAP_NODES.filter(n => n.id !== 'alpha7' && isHeld(n.id, s)).length;
 }
 
 function threatBudget(turn) {
@@ -1152,7 +1116,11 @@ function threatBudget(turn) {
 }
 
 function firstThreatTurn() {
-    return BALANCE.threatFirstTurn + (state.seed || 0) % (BALANCE.threatFirstWindow + 1);
+    return BALANCE.threatFirstTurn + state.seed % (BALANCE.threatFirstWindow + 1);
+}
+
+function threatSeed(turn) {
+    return turn * 917 + 3 + state.seed;
 }
 
 function spawnThreats() {
@@ -1178,16 +1146,31 @@ function spawnThreats() {
     let r = rng() * total;
     const nodeId = (targets.find(t => (r -= t.w) < 0) || targets[targets.length - 1]).id;
     const preavis = BALANCE.threatWarning + activeEffects().threatWarning;
-    m.threats.push({nodeId, arrivesIn: preavis, budget: threatBudget(state.turn), seed: state.turn * 917 + 3 + state.seed});
+    m.threats.push({nodeId, arrivesIn: preavis, budget: threatBudget(state.turn), seed: threatSeed(state.turn)});
     m.lastThreatTurn = state.turn;
     addLog('⚠️ Menace détectée sur ' + getNode(nodeId).name + ' — arrivée dans ' + preavis + ' tours', 'warning');
 }
 
 let endTurnBusy = false;
 
+function checkCollapse() {
+    if (state.resources.stability <= 0) showDefeat('revolte');
+    else if (state.resources.energy <= 0) showDefeat('blackout');
+    else return false;
+    return true;
+}
+
 async function endTurn() {
     if (state.phase !== 'build' || endTurnBusy) return;
     endTurnBusy = true;
+    try {
+        await runTurn();
+    } finally {
+        endTurnBusy = false;
+    }
+}
+
+async function runTurn() {
     const m = state.map;
 
     const prod = getCampaignProduction();
@@ -1216,29 +1199,19 @@ async function endTurn() {
     m.threats = m.threats.filter(t => t.arrivesIn > 0);
     for (const th of arriving) {
         if (m.owner[th.nodeId] === 'player') combats.push({kind: 'defense', node: th.nodeId, threat: th});
-        else if (m.allied[th.nodeId] && allyNeedsArmy(th)) combats.push({kind: 'allyDefense', node: th.nodeId, threat: th});
-        else if (m.allied[th.nodeId]) resolveAlliedDefense(th);
+        else if (m.allied[th.nodeId]) {
+            const holds = alliedHolds(th);
+            if (!holds && armyGuards(th.nodeId)) combats.push({kind: 'allyDefense', node: th.nodeId, threat: th});
+            else resolveAlliedDefense(th, holds);
+        }
         else if (m.owner[th.nodeId] === 'neutral') resolveRaid(th);
     }
 
     for (const c of combats) {
-        const ended = await resolveCombat(c);
-        if (ended) {
-            endTurnBusy = false;
-            return;
-        }
+        if (await resolveCombat(c)) return;
     }
 
-    if (state.resources.stability <= 0) {
-        showDefeat('revolte');
-        endTurnBusy = false;
-        return;
-    }
-    if (state.resources.energy <= 0) {
-        showDefeat('blackout');
-        endTurnBusy = false;
-        return;
-    }
+    if (checkCollapse()) return;
 
     spawnThreats();
 
@@ -1253,7 +1226,7 @@ async function endTurn() {
         pendingScreens.push({type: 'event', event: ms});
     }
     const newCh = getChapterFromMap();
-    if (newCh !== state.chapter) {
+    if (newCh > state.chapter) {
         state.chapter = newCh;
         pendingScreens.push({type: 'chapter', chapter: newCh});
     }
@@ -1262,16 +1235,16 @@ async function endTurn() {
     state.command = getCommandMax();
     tickHeroWounds();
     state.phase = 'build';
+    endTurnBusy = false;
     save();
     render();
-    endTurnBusy = false;
     toast('Tour ' + state.turn + ' · production ' + fmtProd(prod), '');
     sfx('turn');
     const fresh = m.lastThreatTurn === state.turn - 1 ? m.threats[m.threats.length - 1] : null;
     if (fresh) {
         toast('Menace détectée sur ' + getNode(fresh.nodeId).name, 'warning');
         sfx('threat');
-        pulseNode(fresh.nodeId, 0xc8473c);
+        pulseNode(fresh.nodeId, 'hostile');
     }
     processNext();
 }
@@ -1307,7 +1280,7 @@ function showEvent(evt) {
     const avail = evt.choices.filter(c => !c.requires || c.requires(state));
     let html = '<div id="event-modal" class="plate"><div class="eyebrow">' + (evt.id.startsWith('ms_') ? 'Jalon' : 'Événement') + ' · Tour ' + state.turn + '</div><h2>' + evt.title + '</h2><div class="rule"></div><div class="event-text" id="evt-text"></div><div class="event-choices" id="evt-ch" style="display:none">';
     avail.forEach((c, i) => {
-        html += '<button class="choice" onclick="onEvtChoice(' + i + ')"><span>' + richText(c.text) + (c.hint ? '<small class="choice-hint">' + richText(c.hint) + '</small>' : '') + '</span>' + (c.effects ? fxHtml(c.effects) : '<span class="fx">' + richText(c.effect || '') + '</span>') + '</button>';
+        html += '<button class="choice" onclick="onEvtChoice(' + i + ')"><span>' + richText(c.text) + (c.hint ? '<small class="choice-hint">' + richText(c.hint) + '</small>' : '') + '</span>' + (c.effects ? fxHtml(c.effects) : '') + '</button>';
     });
     html += '</div></div>';
     ov.innerHTML = html;
@@ -1332,7 +1305,7 @@ function onEvtChoice(i) {
         state.map.allied[c.ally] = true;
         addLog('🤝 Alliance scellée avec ' + getNode(c.ally).name, 'chapter');
         sfx('alliance');
-        pulseNode(c.ally, 0x5fb37e);
+        pulseNode(c.ally, 'allied');
     }
     if (c.hint) addLog('↳ ' + c.hint, 'chapter');
     clampRes();
@@ -1346,14 +1319,7 @@ function onEvtChoice(i) {
         showEnding(c.ending);
         return;
     }
-    if (state.resources.stability <= 0) {
-        showDefeat('revolte');
-        return;
-    }
-    if (state.resources.energy <= 0) {
-        showDefeat('blackout');
-        return;
-    }
+    if (checkCollapse()) return;
     save();
     render();
     processNext();
@@ -1397,7 +1363,7 @@ function finishTw() {
 function showChapter(ch) {
     const info = CHAPTERS[ch - 1];
     const ov = document.getElementById('chapter-overlay');
-    ov.innerHTML = '<div class="chapter-box plate"><div class="eyebrow">Chapitre</div><div class="ch-num">' + ['', 'I', 'II', 'III'][info.num] + '</div><h2>' + info.name.charAt(0) + info.name.slice(1).toLowerCase() + '</h2><div class="ch-sub">' + info.sub + '</div><div class="rule"></div><p>' + info.desc + '</p><button class="btn btn-primary" onclick="dismissCh()">Continuer</button></div>';
+    ov.innerHTML = '<div class="chapter-box plate"><div class="eyebrow">Chapitre</div><div class="ch-num">' + roman(info.num) + '</div><h2>' + chapterTitle(info) + '</h2><div class="ch-sub">' + info.sub + '</div><div class="rule"></div><p>' + info.desc + '</p><button class="btn btn-primary" onclick="dismissCh()">Continuer</button></div>';
     ov.classList.add('active');
     addLog('═══ Chapitre ' + info.num + ' : ' + info.name + ' ═══', 'chapter');
 }
@@ -1438,7 +1404,7 @@ function showEnding(id) {
 }
 
 function statsHtml() {
-    const st = state.stats || newStats();
+    const st = state.stats;
     const box = (v, l) => '<div class="stat-box"><div class="sv">' + v + '</div><div class="sl">' + l + '</div></div>';
     return '<div class="end-stats">' + box(state.turn, 'Tours') + box(state.buildings.length, 'Bâtiments') + box(state.eventsSeen.length, 'Événements') + box(st.assaultsWon, 'Assauts gagnés') + box(st.assaultsLost, 'Assauts perdus') + box(st.retreats, 'Replis') + box(st.defensesWon, 'Défenses tenues') + box(st.defensesLost, 'Défenses perdues') + box(st.recruited, 'Recrues') + box(st.unitsLost, 'Unités perdues') + '</div>';
 }
@@ -1457,14 +1423,14 @@ function showScreen(id) {
 }
 
 function checkContinue() {
-    const s = hasSave() ? readSave() : null;
+    const s = readSave();
     document.getElementById('btn-continue').style.display = s ? '' : 'none';
     document.getElementById('btn-new').className = 'btn ' + (s ? 'btn-ghost' : 'btn-primary');
     renderSaveInfo(s);
 }
 
 function askNewGame() {
-    const s = hasSave() ? readSave() : null;
+    const s = readSave();
     if (!s) return newGame();
     showNewGameConfirm(s);
 }
@@ -1485,7 +1451,7 @@ function resetView() {
 
 function newGame(diff) {
     deleteSave();
-    const d = DIFFICULTIES[diff] ? diff : DIFFICULTIES[typeof difficultyPref === 'function' && difficultyPref()] ? difficultyPref() : 'normal';
+    const d = DIFFICULTIES[diff] ? diff : difficultyPref();
     applyDifficulty(d);
     state = defaultState();
     state.difficulty = d;

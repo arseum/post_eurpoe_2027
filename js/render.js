@@ -67,9 +67,10 @@ function render() {
     const inBattle = state.phase !== 'build';
     document.body.classList.toggle('in-battle', inBattle);
     renderTop();
-    if (inBattle) renderBattle();
-    else renderBuildPhase();
-    guideUpdate();
+    if (inBattle) {
+        renderBattle();
+        guideUpdate();
+    } else renderBuildPhase();
 }
 
 const gt = {el: null};
@@ -105,7 +106,7 @@ function positionTooltip(el) {
 function initKeys() {
     document.addEventListener('keydown', e => {
         if (e.key !== 'Escape') return;
-        if (document.getElementById('confirm-overlay').classList.contains('active')) return assaultPlan ? closeAssault() : closeConfirm();
+        if (document.getElementById('confirm-overlay').classList.contains('active')) return confirmDismiss();
         const rs = document.getElementById('research-overlay');
         if (rs.classList.contains('active')) return toggleResearch();
         if (openDrawer) return toggleDrawer(openDrawer);
@@ -188,7 +189,19 @@ function closeNodePanel() {
 
 function focusThreat(id) {
     selectNode(id);
-    if (window.Map3D && Map3D.focus) Map3D.focus(id);
+    if (window.Map3D) Map3D.focus(id);
+}
+
+function nextThreatAt(m, id) {
+    return m.threats.filter(t => t.nodeId === id).sort((a, b) => a.arrivesIn - b.arrivesIn)[0];
+}
+
+function roman(n) {
+    return ['', 'I', 'II', 'III'][n];
+}
+
+function chapterTitle(ch) {
+    return ch.name.charAt(0) + ch.name.slice(1).toLowerCase();
 }
 
 function nodeStatus(id, s = state) {
@@ -200,7 +213,7 @@ function buildMapSnapshot(s = state) {
     const reach = new Set();
     if (m.armyAt && !m.armyDest) getNode(m.armyAt).links.forEach(l => reach.add(l.to));
     const nodes = MAP_NODES.map(n => {
-        const threat = m.threats.filter(t => t.nodeId === n.id).sort((a, b) => a.arrivesIn - b.arrivesIn)[0];
+        const threat = nextThreatAt(m, n.id);
         return {
             id: n.id, name: n.name, glyph: ICONS.node[n.type], lon: n.geo.lon, lat: n.geo.lat,
             status: nodeStatus(n.id, s), selected: s === state && n.id === selectedNode,
@@ -309,14 +322,14 @@ function domeBody() {
     let h = `<button class="btn btn-ghost btn-block enter-dome" onclick="setCenterView('${centerView === 'base' ? 'map' : 'base'}')">${ic(centerView === 'base' ? 'map-trifold' : 'sign-in')}${centerView === 'base' ? 'Retour à la carte' : 'Entrer dans le dôme'}</button>`;
     h += '<div class="sec-label">Cœur de PROMETHEUS</div>';
     const reason = coreCost ? blockReason(coreCost, true) : '';
-    h += `<div class="core-card"><div class="core-gem"><span>${['', 'I', 'II', 'III'][state.core]}</span></div><div class="core-info"><div class="row-title">Niveau ${state.core} sur 3</div><div class="row-sub">Chaque niveau ajoute ${BALANCE.armyCapPerCore} places à l'armée et ouvre un palier de recherche.</div></div>`
+    h += `<div class="core-card"><div class="core-gem"><span>${roman(state.core)}</span></div><div class="core-info"><div class="row-title">Niveau ${state.core} sur 3</div><div class="row-sub">Chaque niveau ajoute ${BALANCE.armyCapPerCore} places à l'armée et ouvre un palier de recherche.</div></div>`
         + (coreCost
             ? `<button class="btn btn-primary btn-block" ${reason ? 'disabled' : ''} data-tt="${esc(reason)}" onclick="upgradeCore()">${ic('arrow-up')}Éveiller ${costHtml(coreCost)}</button>`
             : '<span class="tag">Éveil complet</span>')
         + '</div>';
     for (let ch = 1; ch <= 3; ch++) {
         const list = BUILDINGS.filter(b => b.chapter === ch);
-        h += `<div class="sec-label">${CHAPTERS[ch - 1].name.charAt(0) + CHAPTERS[ch - 1].name.slice(1).toLowerCase()}<span class="count">Ch. ${ch}</span></div>`;
+        h += `<div class="sec-label">${chapterTitle(CHAPTERS[ch - 1])}<span class="count">Ch. ${ch}</span></div>`;
         list.forEach(b => {
             const built = isBuilt(b.id), locked = !isBuildingUnlocked(b);
             const lvl = getBuildingLevel(b.id);
@@ -355,7 +368,7 @@ function armyBody() {
     const transferTt = 'Transférer : 1 point de commandement couvre tous les transferts du tour';
     if (!state.army.length) h += '<div class="empty">Aucune unité. Recrutez ci-dessous.</div>';
     state.army.forEach((id, i) => {
-        const u = UNITS.find(x => x.id === id);
+        const u = getUnit(id);
         h += `<div class="row" data-tt="${unitTtData(u)}"><div class="crest">${ic(ICONS.unit[u.id])}</div><div class="row-main"><div class="row-title">${esc(u.name)}${u.size > 1 ? `<span class="tag">×${u.size}</span>` : ''}</div><div class="row-meta">${statsHtmlUnit(u)}</div></div>`
             + (onOwned ? `<button class="btn btn-ghost btn-icon" data-tt="${esc(transferTt)}" onclick="transferToGarrison(${i})" aria-label="Vers la garnison">${ic('arrow-down')}</button>` : '')
             + `<button class="btn btn-ghost btn-icon" data-tt="Libérer l'unité" onclick="dismissUnit(${i})" aria-label="Libérer">${ic('x')}</button></div>`;
@@ -365,7 +378,7 @@ function armyBody() {
         h += `<div class="sec-label">Garnison de ${esc(atNode.name)}<span class="count">${g.length}</span></div>`;
         if (!g.length) h += '<div class="empty">Garnison vide. Ce lieu tombera s\'il est attaqué sans armée.</div>';
         g.forEach((id, i) => {
-            const u = UNITS.find(x => x.id === id);
+            const u = getUnit(id);
             h += `<div class="row" data-tt="${unitTtData(u)}"><div class="crest">${ic(ICONS.unit[u.id])}</div><div class="row-main"><div class="row-title">${esc(u.name)}</div><div class="row-meta">${statsHtmlUnit(u)}</div></div><button class="btn btn-ghost btn-icon" data-tt="${esc(transferTt)}" onclick="transferToArmy(${i})" aria-label="Vers l'armée">${ic('arrow-up')}</button><button class="btn btn-ghost btn-icon" data-tt="Libérer l'unité (supprime son entretien)" onclick="dismissGarrison('${m.armyAt}', ${i})" aria-label="Libérer">${ic('x')}</button></div>`;
         });
     }
@@ -429,7 +442,7 @@ function renderNodePanel() {
     if (node.cache && !m.cacheLooted[id] && !owned) {
         body += `<div class="fact">${ic('package')}<span class="fact-l">Cache à piller</span>${fxHtml(node.cache)}</div>`;
     }
-    const threat = m.threats.filter(t => t.nodeId === id).sort((a, b) => a.arrivesIn - b.arrivesIn)[0];
+    const threat = nextThreatAt(m, id);
     if (threat) {
         const pv = getForcePreview(threat.budget, threat.seed);
         body += `<div class="fact threat">${ic('warning-diamond')}<span class="fact-l">Attaque dans ${threat.arrivesIn} tour(s)</span>${forceHtml(pv)}</div>`;
@@ -437,7 +450,7 @@ function renderNodePanel() {
     if (!owned && !allied) {
         const pv = getForcePreview(garrisonBudgetFor(node), garrisonSeed(id));
         body += `<div class="fact">${ic('shield-warning')}<span class="fact-l">Garnison estimée</span>${forceHtml(pv)}</div>`;
-        if (m.fallenAllies && m.fallenAllies[id]) body += `<div class="fact">${ic('handshake')}<span class="fact-l">Ancienne alliée occupée : la reprendre la libère et renoue l'alliance</span></div>`;
+        if (m.fallenAllies[id]) body += `<div class="fact">${ic('handshake')}<span class="fact-l">Ancienne alliée occupée : la reprendre la libère et renoue l'alliance</span></div>`;
     }
     if (owned) {
         const g = m.garrisons[id] || [];
@@ -463,8 +476,10 @@ function renderNodePanel() {
         body += `<div class="fact">${ic('wall')}<span class="fact-l">Fortifié : +${BALANCE.fortifyDef} DEF au prochain combat</span></div>`;
     }
     if (node.type === 'city' && m.owner[id] === 'neutral' && !allied) {
-        const r = blockReason(null, true) || ((state.resources.influence || 0) < getAllyCost(node) ? 'Influence insuffisante' : '');
-        body += action('handshake', 'Proposer une alliance', `allyCity('${id}')`, r, `<span class="${(state.resources.influence || 0) < getAllyCost(node) ? 'short' : ''}">${resIcon('influence')}${getAllyCost(node)}</span>`);
+        const cost = getAllyCost(node);
+        const short = (state.resources.influence || 0) < cost;
+        const r = blockReason(null, true) || (short ? 'Influence insuffisante' : '');
+        body += action('handshake', 'Proposer une alliance', `allyCity('${id}')`, r, `<span class="${short ? 'short' : ''}">${resIcon('influence')}${cost}</span>`);
     }
     if ((st === 'hostile' || (node.type === 'city' && st === 'neutral')) && canMarch) {
         body += action('sword', 'Préparer l\'assaut', `openAssault('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`);
@@ -496,11 +511,7 @@ function oddsClass(x) {
 function openAssault(id) {
     assaultPlan = {dest: id, leave: new Set()};
     renderAssault();
-    const ov = document.getElementById('confirm-overlay');
-    ov.onclick = e => {
-        if (e.target === ov) closeAssault();
-    };
-    ov.classList.add('active');
+    openConfirm(null, closeAssault);
 }
 
 function closeAssault() {
@@ -533,11 +544,11 @@ function renderAssault() {
     const eta = linkTurns(m.armyAt, node.id);
     const canLeave = m.owner[m.armyAt] === 'player';
     const engaged = state.army.filter((_, i) => !assaultPlan.leave.has(i));
-    const defenders = generateForce(garrisonBudgetFor(node, state.turn + eta), garrisonSeed(node.id));
+    const defenders = generateForce(garrisonBudgetFor(node, state.turn + eta - 1), garrisonSeed(node.id));
     const est = estimateBattle(assaultUnits(node.id, engaged), defenders, BALANCE.estimateRuns, {retreatAt: state.retreatAt});
     const lose = Math.max(0, 1 - est.win - est.retreat);
     const rows = state.army.map((id, i) => {
-        const u = UNITS.find(x => x.id === id);
+        const u = getUnit(id);
         const on = !assaultPlan.leave.has(i);
         const btn = canLeave ? `<button class="btn btn-ghost engage${on ? ' on' : ''}" onclick="toggleEngage(${i})">${on ? ic('sword') + 'Engagée' : ic('shield') + 'Reste'}</button>` : '';
         return `<div class="row${on ? '' : ' off'}"><div class="crest">${ic(ICONS.unit[u.id])}</div><div class="row-main"><div class="row-title">${esc(u.name)}</div><div class="row-meta">${statsHtmlUnit(u)}</div></div>${btn}</div>`;
@@ -546,7 +557,7 @@ function renderAssault() {
     const seg = RETREAT_OPTIONS.map(([v, l, tt]) => `<button class="speed-btn${state.retreatAt === v ? ' active' : ''}" data-tt="${esc(tt)}" onclick="pickRetreat(${v})">${l}</button>`).join('');
     ov.innerHTML = `<div class="confirm-box assault-box plate" role="dialog" aria-labelledby="as-title"><div class="eyebrow">Préparer l'assaut · arrivée dans ${eta} tour(s)</div><h2 id="as-title">${esc(node.name)}</h2><div class="rule"></div>`
         + `<div class="odds"><div class="odd ${oddsClass(est.win)}"><b>${oddsPct(est.win)}</b><span>Victoire</span></div><div class="odd"><b>${oddsPct(est.retreat)}</b><span>Repli</span></div><div class="odd ${lose > 0.25 ? 'bad' : ''}"><b>${oddsPct(lose)}</b><span>Armée perdue</span></div></div>`
-        + `<div class="fact">${ic('shield-warning')}<span class="fact-l">Garnison à l'arrivée</span>${forceHtml(getForcePreview(garrisonBudgetFor(node, state.turn + eta), garrisonSeed(node.id)))}</div>`
+        + `<div class="fact">${ic('shield-warning')}<span class="fact-l">Garnison à l'arrivée</span>${forceHtml(forceCounts(defenders))}</div>`
         + `<div class="sec-label">Unités engagées<span class="count">${engaged.length} / ${state.army.length}</span></div>${canLeave ? '' : `<div class="np-hint">${ic('info')}Hors d'un territoire à vous, toute l'armée marche.</div>`}<div class="assault-units">${rows}</div>`
         + (heroes ? `<div class="fact">${ic('star-four')}<span class="fact-l">Héros présents</span>${heroes}</div>` : '')
         + `<div class="sec-label">Consigne de repli</div><div class="seg">${seg}</div>`
@@ -555,7 +566,7 @@ function renderAssault() {
 
 function defenseOdds(t) {
     const units = defenseUnits(t.nodeId);
-    if (!units.length) return 0;
+    if (!units.length) return null;
     const key = [state.turn, t.nodeId, t.seed, t.budget, state.retreatAt, JSON.stringify(units.map(u => [u.id, u.hp, u.atk, u.def]))].join('|');
     if (!oddsCache.has(key)) {
         if (oddsCache.size > 50) oddsCache.clear();
@@ -575,7 +586,7 @@ function renderThreats() {
         const units = getForcePreview(t.budget, t.seed).reduce((s, e) => s + e.count, 0);
         const own = state.map.owner[t.nodeId] === 'player';
         const odds = own ? defenseOdds(t) : null;
-        const oddsTxt = own ? ` · <span class="odds-inline ${oddsClass(odds)}">${odds ? oddsPct(odds) + ' de tenir' : 'sans défense'}</span>` : '';
+        const oddsTxt = own ? ` · <span class="odds-inline ${oddsClass(odds)}">${odds === null ? 'sans défense' : oddsPct(odds) + ' de tenir'}</span>` : '';
         return `<button class="threat-card${t.arrivesIn <= 1 ? ' imminent' : ''}" onclick="focusThreat('${t.nodeId}')" data-tt="${esc('Voir ' + n.name + (own ? ' — chances estimées avec la garnison actuelle' : ''))}"><span class="t-eta"><span>${t.arrivesIn}</span></span><span><span class="t-name">${esc(n.name)}</span><br><span class="t-sub">${units} assaillants · ${t.arrivesIn > 1 ? 'dans ' + t.arrivesIn + ' tours' : 'au prochain tour'}${oddsTxt}</span></span></button>`;
     }).join('');
 }
@@ -594,13 +605,7 @@ function requestEndTurn() {
 
 function showEndTurnConfirm() {
     const n = state.command;
-    const ov = document.getElementById('confirm-overlay');
-    ov.innerHTML = `<div class="confirm-box plate" role="alertdialog" aria-labelledby="cf-title"><div class="eyebrow">Fin du tour ${state.turn}</div><h2 id="cf-title">Des ordres restent à donner</h2><div class="rule"></div><p>Les points de commandement ne se cumulent pas : ceux qui ne sont pas utilisés sont perdus à la fin du tour.</p><div class="fact">${ic('diamond')}<span class="fact-l">${n} point${n > 1 ? 's' : ''} de commandement inutilisé${n > 1 ? 's' : ''}</span><span class="force">sur ${getCommandMax()}</span></div><label class="ask-again"><input type="checkbox" id="cf-skip"><span>Ne plus me demander</span></label><div class="confirm-actions"><button class="btn btn-primary" onclick="closeConfirm()">${ic('arrow-left')}Revenir aux ordres</button><button class="btn btn-ghost" onclick="confirmEndTurn()">${ic('sun-horizon')}Finir le tour</button></div></div>`;
-    ov.onclick = e => {
-        if (e.target === ov) closeConfirm();
-    };
-    ov.classList.add('active');
-    ov.querySelector('.btn-primary').focus();
+    openConfirm(`<div class="confirm-box plate" role="alertdialog" aria-labelledby="cf-title"><div class="eyebrow">Fin du tour ${state.turn}</div><h2 id="cf-title">Des ordres restent à donner</h2><div class="rule"></div><p>Les points de commandement ne se cumulent pas : ceux qui ne sont pas utilisés sont perdus à la fin du tour.</p><div class="fact">${ic('diamond')}<span class="fact-l">${n} point${n > 1 ? 's' : ''} de commandement inutilisé${n > 1 ? 's' : ''}</span><span class="force">sur ${getCommandMax()}</span></div><label class="ask-again"><input type="checkbox" id="cf-skip"><span>Ne plus me demander</span></label><div class="confirm-actions"><button class="btn btn-primary" onclick="closeConfirm()">${ic('arrow-left')}Revenir aux ordres</button><button class="btn btn-ghost" onclick="confirmEndTurn()">${ic('sun-horizon')}Finir le tour</button></div></div>`).querySelector('.btn-primary').focus();
 }
 
 function confirmEndTurn() {
@@ -612,28 +617,40 @@ function confirmEndTurn() {
 
 const END_CONFIRM_KEY = 'pe2147_end_confirm';
 
-function endConfirmPref() {
+function prefGet(key, fallback = null) {
     try {
-        return localStorage.getItem(END_CONFIRM_KEY) !== '0';
+        const v = localStorage.getItem(key);
+        return v === null ? fallback : v;
     } catch (e) {
-        return true;
+        return fallback;
     }
 }
 
-function setEndConfirmPref(on) {
+function prefSet(key, v) {
     try {
-        localStorage.setItem(END_CONFIRM_KEY, on ? '1' : '0');
+        localStorage.setItem(key, v);
     } catch (e) {
     }
+}
+
+function syncSwitch(id, on) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('on', on);
+    el.setAttribute('aria-checked', on ? 'true' : 'false');
+}
+
+function endConfirmPref() {
+    return prefGet(END_CONFIRM_KEY) !== '0';
+}
+
+function setEndConfirmPref(on) {
+    prefSet(END_CONFIRM_KEY, on ? '1' : '0');
     endConfirmOptionInit();
 }
 
 function endConfirmOptionInit() {
-    const el = document.getElementById('opt-end-confirm');
-    if (!el) return;
-    const on = endConfirmPref();
-    el.classList.toggle('on', on);
-    el.setAttribute('aria-checked', on ? 'true' : 'false');
+    syncSwitch('opt-end-confirm', endConfirmPref());
 }
 
 let dayVeilBusy = false;
@@ -646,7 +663,7 @@ function passDay() {
     veil.innerHTML = `<div class="dv-inner"><div class="dv-sun">${ic('sun-horizon')}</div><div class="eyebrow">Une nuit passe sur l'Europe</div><div class="dv-turns"><span class="dv-old">${state.turn}</span><span class="dv-new">${state.turn + 1}</span></div><div class="dv-label">Tour</div><div class="rule"></div></div>`;
     veil.classList.remove('out');
     veil.classList.add('on');
-    if (window.Map3D && Map3D.passDay) Map3D.passDay(1900);
+    if (window.Map3D) Map3D.passDay(1900);
     setTimeout(() => {
         endTurn();
         veil.classList.add('out');
@@ -724,7 +741,7 @@ function renderResearch() {
             const tierItems = items.filter(r => r.tier === tier);
             if (!tierItems.length) return;
             const open = tier <= state.core;
-            col += `<div class="rs-tier${open ? ' open' : ''}">PALIER ${['', 'I', 'II', 'III'][tier]}${open ? '' : `<span class="tag warn">Cœur ${tier} requis</span>`}</div><div class="rs-nodes">`;
+            col += `<div class="rs-tier${open ? ' open' : ''}">PALIER ${roman(tier)}${open ? '' : `<span class="tag warn">Cœur ${tier} requis</span>`}</div><div class="rs-nodes">`;
             tierItems.forEach(r => {
                 const done = hasResearch(r.id);
                 let cls = 'rs-item', foot;
@@ -767,7 +784,7 @@ function timeAgo(ts) {
 
 function saveSummary(s) {
     const ch = CHAPTERS[(s.chapter || 1) - 1] || CHAPTERS[0];
-    return `Tour ${s.turn || 1} · Chapitre ${['', 'I', 'II', 'III'][ch.num]} · ${ch.name.charAt(0) + ch.name.slice(1).toLowerCase()}`;
+    return `Tour ${s.turn || 1} · Chapitre ${roman(ch.num)} · ${chapterTitle(ch)}`;
 }
 
 function renderSaveInfo(s) {
@@ -781,13 +798,20 @@ function renderSaveInfo(s) {
 }
 
 function showNewGameConfirm(s) {
+    openConfirm(`<div class="confirm-box plate" role="alertdialog" aria-labelledby="cf-title"><div class="eyebrow">Nouvelle campagne</div><h2 id="cf-title">Abandonner la campagne en cours ?</h2><div class="rule"></div><p>Il n'existe qu'une sauvegarde. Commencer une nouvelle campagne effacera définitivement celle-ci :</p><div class="fact">${ic('floppy-disk')}<span class="fact-l">${saveSummary(s)}</span><span class="force">${s.savedAt ? timeAgo(s.savedAt) : ''}</span></div><div class="confirm-actions"><button class="btn btn-primary" onclick="closeConfirm();continueGame()">${ic('play')}Reprendre</button><button class="btn btn-danger" onclick="closeConfirm();newGame()">${ic('warning')}Tout effacer</button></div></div>`).querySelector('.btn-primary').focus();
+}
+
+let confirmDismiss = closeConfirm;
+
+function openConfirm(html, onDismiss = closeConfirm) {
     const ov = document.getElementById('confirm-overlay');
-    ov.innerHTML = `<div class="confirm-box plate" role="alertdialog" aria-labelledby="cf-title"><div class="eyebrow">Nouvelle campagne</div><h2 id="cf-title">Abandonner la campagne en cours ?</h2><div class="rule"></div><p>Il n'existe qu'une sauvegarde. Commencer une nouvelle campagne effacera définitivement celle-ci :</p><div class="fact">${ic('floppy-disk')}<span class="fact-l">${saveSummary(s)}</span><span class="force">${s.savedAt ? timeAgo(s.savedAt) : ''}</span></div><div class="confirm-actions"><button class="btn btn-primary" onclick="closeConfirm();continueGame()">${ic('play')}Reprendre</button><button class="btn btn-danger" onclick="closeConfirm();newGame()">${ic('warning')}Tout effacer</button></div></div>`;
+    if (html) ov.innerHTML = html;
+    confirmDismiss = onDismiss;
     ov.onclick = e => {
-        if (e.target === ov) closeConfirm();
+        if (e.target === ov) confirmDismiss();
     };
     ov.classList.add('active');
-    ov.querySelector('.btn-primary').focus();
+    return ov;
 }
 
 function closeConfirm() {
@@ -811,12 +835,8 @@ function flashSaved() {
 const DIFF_KEY = 'pe2147_diff';
 
 function difficultyPref() {
-    try {
-        const v = localStorage.getItem(DIFF_KEY);
-        return DIFFICULTIES[v] ? v : 'normal';
-    } catch (e) {
-        return 'normal';
-    }
+    const v = prefGet(DIFF_KEY);
+    return DIFFICULTIES[v] ? v : 'normal';
 }
 
 function difficultyInit() {
@@ -828,11 +848,7 @@ function difficultyInit() {
 }
 
 function pickDifficulty(k) {
-    try {
-        localStorage.setItem(DIFF_KEY, k);
-    } catch (e) {
-        return;
-    }
+    prefSet(DIFF_KEY, k);
     difficultyInit();
     Sfx.play('click');
 }

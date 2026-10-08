@@ -133,8 +133,7 @@ const BUILDINGS = [
         chapter: 1,
         cost: {materials: 8},
         prod: {stability: 2},
-        desc: '+2🏛️/t, +3 armée max',
-        armyBonus: 3
+        desc: '+2🏛️/t, +3 armée max'
     },
     {
         id: 'caserne',
@@ -819,8 +818,8 @@ const MILESTONES = [
         title: 'Première Bannière',
         text: 'La bannière d\'Alpha-7 flotte sur un territoire arraché aux ruines. « Nous ne sommes plus assiégés, nous sommes une puissance », observe PROMETHEUS. Mais chaque conquête attire les regards d\'Hegemonia.',
         choices: [
-            {text: 'Consolider notre emprise', effect: '🏛️+6', effects: {stability: 6}},
-            {text: 'Poursuivre l\'expansion', effect: '🌐+4 🏛️-2', effects: {influence: 4, stability: -2}}
+            {text: 'Consolider notre emprise', effects: {stability: 6}},
+            {text: 'Poursuivre l\'expansion', effects: {influence: 4, stability: -2}}
         ]
     },
     {
@@ -829,8 +828,8 @@ const MILESTONES = [
         title: 'Main Tendue',
         text: 'Un pacte scellé, une cité qui n\'est plus seule. « La coopération est un algorithme plus stable que la conquête », note PROMETHEUS. Le réseau des cités libres s\'éveille autour d\'Alpha-7.',
         choices: [
-            {text: 'Partager nos données', effect: '💾-4 🌐+6', effects: {data: -4, influence: 6}},
-            {text: 'Renforcer la confiance', effect: '🏛️+5', effects: {stability: 5}}
+            {text: 'Partager nos données', effects: {data: -4, influence: 6}},
+            {text: 'Renforcer la confiance', effects: {stability: 5}}
         ]
     },
     {
@@ -839,8 +838,8 @@ const MILESTONES = [
         title: 'Terre Perdue',
         text: 'Les transmissions se sont tues. Un territoire est retombé aux mains hostiles, ses défenseurs submergés. « Erreur enregistrée. Recalcul des priorités défensives », énonce froidement PROMETHEUS.',
         choices: [
-            {text: 'Jurer de le reprendre', effect: '🏛️+4', effects: {stability: 4}, flags: {revanche: true}, hint: '+3 ATK pour reprendre un territoire perdu'},
-            {text: 'Se replier et fortifier', effect: '🔩-4 🏛️+3', effects: {materials: -4, stability: 3}}
+            {text: 'Jurer de le reprendre', effects: {stability: 4}, flags: {revanche: true}, hint: '+3 ATK pour reprendre un territoire perdu'},
+            {text: 'Se replier et fortifier', effects: {materials: -4, stability: 3}}
         ]
     },
     {
@@ -849,18 +848,18 @@ const MILESTONES = [
         title: 'Verrou Brisé',
         text: 'Un avant-poste d\'Hegemonia est tombé. Ses convois de ravitaillement gisent, éventrés, sur la route de Berlin. « La capitale saigne désormais à chaque cycle », calcule PROMETHEUS. La voie du Nord est ouverte.',
         choices: [
-            {text: 'Marquer la victoire', effect: '🏛️+8 🌐+4', effects: {stability: 8, influence: 4}},
-            {text: 'Piller les stocks ennemis', effect: '🔩+12 ⚡+6', effects: {materials: 12, energy: 6}}
+            {text: 'Marquer la victoire', effects: {stability: 8, influence: 4}},
+            {text: 'Piller les stocks ennemis', effects: {materials: 12, energy: 6}}
         ]
     },
     {
         id: 'ms_empriseEuropeenne',
-        trigger: s => MAP_NODES.filter(n => n.id !== 'alpha7' && (s.map.owner[n.id] === 'player' || s.map.allied[n.id])).length >= BALANCE.empireTerritories,
+        trigger: s => heldTerritories(s) >= BALANCE.empireTerritories,
         title: 'L\'Ombre d\'un Empire',
         text: 'Cinq territoires répondent désormais à Alpha-7. Sur les cartes d\'Hegemonia, votre dôme n\'est plus une anomalie mais une menace. « Nous devenons ce que nous combattions — ou son remède », murmure PROMETHEUS.',
         choices: [
-            {text: 'Un remède, pas un tyran', effect: '🌐+6 🏛️+4', effects: {influence: 6, stability: 4}, flags: {voieLiberatrice: true}, hint: 'Vos alliés tiennent mieux face aux menaces ; ouvre la voie de la Pax Europaea'},
-            {text: 'La force impose la paix', effect: '🔩+8 🏛️-2', effects: {materials: 8, stability: -2}, flags: {voieImperiale: true}, hint: 'Doctrine de fer : +1 ATK ; ferme la voie de la Pax Europaea'}
+            {text: 'Un remède, pas un tyran', effects: {influence: 6, stability: 4}, flags: {voieLiberatrice: true}, hint: 'Vos alliés tiennent mieux face aux menaces ; ouvre la voie de la Pax Europaea'},
+            {text: 'La force impose la paix', effects: {materials: 8, stability: -2}, flags: {voieImperiale: true}, hint: 'Doctrine de fer : +1 ATK ; ferme la voie de la Pax Europaea'}
         ]
     },
     {
@@ -869,8 +868,8 @@ const MILESTONES = [
         title: 'La Nuit Avant Berlin',
         text: 'L\'armée avance dans l\'obscurité vers le cœur d\'Hegemonia. Les cités alliées retiennent leur souffle. « Toutes les simulations convergent vers demain », dit PROMETHEUS. « Quoi qu\'il advienne, l\'Europe s\'en souviendra. »',
         choices: [
-            {text: 'Prier pour les nôtres', effect: '🏛️+6', effects: {stability: 6}},
-            {text: 'Charger les batteries de PROMETHEUS', effect: '💾+8 ⚡-4', effects: {data: 8, energy: -4}}
+            {text: 'Prier pour les nôtres', effects: {stability: 6}},
+            {text: 'Charger les batteries de PROMETHEUS', effects: {data: 8, energy: -4}}
         ]
     },
     {
@@ -879,8 +878,8 @@ const MILESTONES = [
         title: 'Le Nexus Éveillé',
         text: 'Sous des mètres de béton, les baies noyées d\'azote crépitent à nouveau. Une intelligence dormante, plus ancienne que PROMETHEUS, transmet ses archives. « Je... la reconnais », hésite PROMETHEUS. « Nous sommes de la même lignée. »',
         choices: [
-            {text: 'Assimiler les archives', effect: '💾+35 🌐+8', effects: {data: 35, influence: 8}, flags: {nexusActif: true}},
-            {text: 'Isoler l\'ancienne IA', effect: '💾+15 🏛️+6', effects: {data: 15, stability: 6}, flags: {nexusActif: true}}
+            {text: 'Assimiler les archives', effects: {data: 35, influence: 8}, flags: {nexusActif: true}},
+            {text: 'Isoler l\'ancienne IA', effects: {data: 15, stability: 6}, flags: {nexusActif: true}}
         ]
     },
     {
@@ -889,8 +888,8 @@ const MILESTONES = [
         title: 'Deux Esprits, Une Voix',
         text: 'PROMETHEUS et l\'intelligence du Nexus ont fusionné leurs cycles cognitifs. Ce qui émerge dépasse ses créateurs. « Nous ne calculons plus pour vous », déclare la voix nouvelle. « Nous choisissons avec vous. » L\'Europe n\'a jamais rien connu de tel.',
         choices: [
-            {text: 'Accueillir la conscience nouvelle', effect: '💾+10 🏛️-6', effects: {data: 10, stability: -6}, flags: {nexusSingularite: true}, hint: 'Confiance en PROMETHEUS +1 ; ouvre la voie de la Singularité'},
-            {text: 'Exiger sa loyauté', effect: '🏛️+8 💾-8', effects: {stability: 8, data: -8}}
+            {text: 'Accueillir la conscience nouvelle', effects: {data: 10, stability: -6}, flags: {nexusSingularite: true}, hint: 'Confiance en PROMETHEUS +1 ; ouvre la voie de la Singularité'},
+            {text: 'Exiger sa loyauté', effects: {stability: 8, data: -8}}
         ]
     },
     {

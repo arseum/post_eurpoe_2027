@@ -111,12 +111,12 @@ const GUIDE_TIPS = [
     {
         id: 'march',
         trigger: s => s.phase === 'build' && !!s.map.armyDest,
-        target: () => s0(() => nodeLabel(state.map.armyDest)),
+        target: () => nodeLabel(state.map.armyDest),
         text: 'L\'armée est en marche et n\'acceptera aucun ordre avant d\'arriver. Surveillez les colonies qu\'elle laisse sans défense.'
     },
     {
         id: 'holding',
-        trigger: s => s.phase === 'build' && (Object.keys(s.map.allied).length > 0 || MAP_NODES.some(n => n.id !== 'alpha7' && s.map.owner[n.id] === 'player')),
+        trigger: s => s.phase === 'build' && heldTerritories(s) > 0,
         target: () => railBtn('army'),
         text: 'Une nouvelle bannière. Une colonie conquise a besoin d\'une <b>garnison</b> : quand l\'armée s\'y trouve, transférez des unités depuis le panneau Armée. Une cité alliée, elle, se défend seule.'
     },
@@ -143,26 +143,15 @@ function s0(fn) {
 }
 
 function guidePref() {
-    try {
-        return localStorage.getItem(GUIDE_KEY) !== '0';
-    } catch (e) {
-        return true;
-    }
+    return prefGet(GUIDE_KEY) !== '0';
 }
 
 function guideOptionInit() {
-    const el = document.getElementById('opt-guide');
-    if (!el) return;
-    const on = guidePref();
-    el.classList.toggle('on', on);
-    el.setAttribute('aria-checked', on ? 'true' : 'false');
+    syncSwitch('opt-guide', guidePref());
 }
 
 function toggleGuideOption() {
-    try {
-        localStorage.setItem(GUIDE_KEY, guidePref() ? '0' : '1');
-    } catch (e) {
-    }
+    prefSet(GUIDE_KEY, guidePref() ? '0' : '1');
     guideOptionInit();
 }
 
@@ -211,7 +200,6 @@ function guideUpdate() {
         guideTarget = null;
         return;
     }
-    if (!state.guide) state.guide = newGuide(false);
     const railGuide = document.getElementById('btn-guide');
     if (railGuide) railGuide.classList.toggle('active', state.guide.on);
     const cur = state.guide.on ? currentGuideItem() : null;
@@ -246,9 +234,13 @@ function guideTrack() {
         ring.classList.remove('show');
     } else {
         const pad = 6;
-        ring.style.transform = `translate(${r.left - pad}px, ${r.top - pad}px)`;
-        ring.style.width = (r.width + pad * 2) + 'px';
-        ring.style.height = (r.height + pad * 2) + 'px';
+        const box = `${r.left - pad},${r.top - pad},${r.width + pad * 2},${r.height + pad * 2}`;
+        if (ring.dataset.box !== box) {
+            ring.dataset.box = box;
+            ring.style.transform = `translate(${r.left - pad}px, ${r.top - pad}px)`;
+            ring.style.width = (r.width + pad * 2) + 'px';
+            ring.style.height = (r.height + pad * 2) + 'px';
+        }
         ring.classList.add('show');
     }
     if (guideTarget) guideRaf = requestAnimationFrame(guideTrack);
@@ -276,7 +268,6 @@ function guideSkip() {
 }
 
 function toggleGuide() {
-    if (!state.guide) state.guide = newGuide(false);
     state.guide.on = !state.guide.on;
     if (state.guide.on && state.guide.step >= GUIDE_STEPS.length && !state.guide.tip) {
         state.guide.step = 0;

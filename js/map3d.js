@@ -31,6 +31,7 @@ const meshToNodeId = new Map();
 const linksByKey = new Map();
 const flags = [];
 const pulses = [];
+const spinners = [];
 let armyGroup = null;
 let pendingSnapshot = null;
 let selectCb = null;
@@ -405,7 +406,10 @@ function createNode(n) {
     const model = new THREE.Group();
     model.position.y = 0.04;
     group.add(model);
-    const pick = (BUILDERS[n.type] || buildCity)(model);
+    (BUILDERS[n.type] || buildCity)(model);
+    model.traverse(o => {
+        if (o.userData.spin) spinners.push(o);
+    });
     const flag = makeFlag(0xffffff);
     flag.group.position.set(0.5, 0.03, -0.32);
     group.add(flag.group);
@@ -423,7 +427,7 @@ function createNode(n) {
     group.add(label);
     const hit = add(group, new THREE.CylinderGeometry(0.75, 0.75, 1.2, 12), new THREE.MeshBasicMaterial({ visible: false }), 0, 0.5);
     meshToNodeId.set(hit, n.id);
-    const entry = { id: n.id, group, model, pick, haloMat, discMat, flagMat: flag.mat, sel, threat, labelEl, status: null, lon, lat, y };
+    const entry = { id: n.id, group, model, haloMat, discMat, flagMat: flag.mat, sel, threat, labelEl, status: null, lon, lat, y };
     nodesById.set(n.id, entry);
     return entry;
 }
@@ -670,10 +674,8 @@ function animate() {
         if (e.threat.visible) e.threat.material.opacity = 0.55 + Math.sin(t * 4) * 0.35;
         const s = e.model.scale.x;
         if (s > 1) e.model.scale.setScalar(Math.max(1, s - dt * 0.6));
-        e.model.traverse(o => {
-            if (o.userData.spin) o.rotation.y += dt * 0.9;
-        });
     });
+    for (const o of spinners) o.rotation.y += dt * 0.9;
     linksByKey.forEach(e => {
         if (e.mesh.material === e.live) e.tex.offset.x -= dt * 0.9 * e.dir;
     });
@@ -713,6 +715,10 @@ function passDay(ms = 1800) {
 }
 
 function mount(el) {
+    if (rafId && container === el) {
+        controls.enabled = !attract;
+        return;
+    }
     container = el;
     if (!scene) buildScene();
     if (!clock) clock = new THREE.Clock();
@@ -807,8 +813,8 @@ function focus(id) {
     focusAnim = { from: controls.target.clone(), to: new THREE.Vector3(e.group.position.x, 0, e.group.position.z + 0.6), k: 0 };
 }
 
-function pulse(id, color = 0x0ac8b9) {
-    if (scene) spawnPulse(id, color);
+function pulse(id, status = 'player') {
+    if (scene) spawnPulse(id, STATUS_COLOR[status]);
 }
 
 window.Map3D = { mount, sync, onSelect, stop, setAttract, focus, pulse, passDay };

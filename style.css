@@ -18,7 +18,6 @@
     --dim: #5b5a56;
     --teal: #0ac8b9;
     --teal-2: #0a7e78;
-    --teal-deep: #0a323c;
     --st-player: #0ac8b9;
     --st-allied: #5fb37e;
     --st-neutral: #c8aa6e;
@@ -2378,8 +2377,8 @@ body.in-battle .build-only {
     line-height: 1.05
 }
 
-.defeat h1 {
-    color: #e59a8f !important
+#end-content .defeat h1 {
+    color: #e59a8f
 }
 
 .end-sub {
@@ -2454,37 +2453,6 @@ body.in-battle .build-only {
 .end-others {
     color: var(--text-2);
     font-size: .86rem
-}
-
-.ending-choices {
-    display: grid;
-    gap: 10px;
-    text-align: left
-}
-
-.ending-choices button {
-    padding: 16px 18px;
-    border: 1px solid var(--gold-3);
-    background: rgba(4, 8, 15, .55);
-    transition: border-color .2s, background .2s
-}
-
-.ending-choices button:hover {
-    border-color: var(--gold-1);
-    background: rgba(10, 50, 60, .5)
-}
-
-.ending-choices h3 {
-    font-family: var(--font-display);
-    font-weight: 400;
-    font-size: 1.2rem;
-    color: var(--gold-hi)
-}
-
-.ending-choices p {
-    font-size: .88rem;
-    color: var(--text-2);
-    margin-top: 4px
 }
 
 .result-overlay {

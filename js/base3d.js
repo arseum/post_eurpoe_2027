@@ -488,6 +488,9 @@ function animate() {
 }
 
 function mount(el) {
+    if (rafId && container === el) {
+        return;
+    }
     container = el;
     if (!scene) buildScene();
     if (!clock) clock = new THREE.Clock();

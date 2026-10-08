@@ -147,14 +147,12 @@ phaseSwitch = async function (cb) { cb(); };
         if (__sim.current) __sim.current.battle = true;
         return sim;
     };
-    if (typeof resolveAlliedDefense === 'function') {
-        const origAllied = resolveAlliedDefense;
-        resolveAlliedDefense = function (th) {
-            const had = !!state.map.allied[th.nodeId];
-            origAllied(th);
-            __sim.alliedDefenses.push({node: th.nodeId, turn: state.turn, held: !had || !!state.map.allied[th.nodeId]});
-        };
-    }
+    const origAllied = resolveAlliedDefense;
+    resolveAlliedDefense = function (th, holds) {
+        const had = !!state.map.allied[th.nodeId];
+        origAllied(th, holds);
+        __sim.alliedDefenses.push({node: th.nodeId, turn: state.turn, held: !had || !!state.map.allied[th.nodeId]});
+    };
 })();
 `;
 

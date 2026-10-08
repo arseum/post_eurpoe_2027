@@ -45,7 +45,7 @@ class Ctx {
     }
 
     friendly(id) {
-        return this.m.owner[id] === 'player' || !!this.m.allied[id];
+        return this.G.isHeld(id);
     }
 
     cmd() {
@@ -130,11 +130,11 @@ class Ctx {
         } finally {
             s.turn = saved;
         }
-        const seedBase = this.G.seedFor(target);
+        const seed = this.G.garrisonSeed(target);
         const ids = s.army;
         const mk = () => this.units(ids, 'a').concat(this.G.buildHeroUnits());
-        const a = this.estimate(mk, budgetNow, [seedBase + s.turn], ids);
-        const b = this.estimate(mk, budgetArr, [seedBase + arrival, seedBase + arrival + 1], ids);
+        const a = this.estimate(mk, budgetNow, [seed], ids);
+        const b = this.estimate(mk, budgetArr, [seed], ids);
         return {p: Math.min(a.p, b.p), margin: Math.min(a.margin, b.margin)};
     }
 
@@ -158,7 +158,7 @@ class Ctx {
     }
 
     projectedThreatSeed(turnsAhead) {
-        return (this.s.turn + turnsAhead) * 917 + 3 + (this.s.seed || 0);
+        return this.G.threatSeed(this.s.turn + turnsAhead);
     }
 
     bal(k) {
@@ -482,7 +482,7 @@ function nodeValue(c, P, id) {
     const n = c.node(id), m = c.m;
     if (!n) return 0;
     if (n.type === 'capital') return P.values.capital;
-    if (n.type === 'city' && m.fallenAllies && m.fallenAllies[id]) return P.ally ? 7 : P.conquerCities ? P.values.city : 0;
+    if (n.type === 'city' && m.fallenAllies[id]) return P.ally ? 7 : P.conquerCities ? P.values.city : 0;
     if (n.type === 'city') return P.conquerCities ? P.values.city : 0;
     let v = P.values[n.type] || 0;
     if (n.cache && !m.cacheLooted[id]) v += P.values.cache;
@@ -532,7 +532,7 @@ function diplomacy(c, P, plan) {
     const cities = c.nodes().filter(n => n.type === 'city' && m.owner[n.id] === 'neutral' && !m.allied[n.id]).sort((a, b) => a.allyCost - b.allyCost);
     for (const n of cities) {
         if (c.cmd() <= 0) break;
-        if ((s.resources.influence || 0) >= n.allyCost) c.G.allyCity(n.id);
+        if ((s.resources.influence || 0) >= c.G.getAllyCost(n)) c.G.allyCity(n.id);
     }
 }
 
@@ -775,7 +775,7 @@ function medCampaign(c, Q) {
     let best = null;
     for (const n of c.nodes()) {
         if (c.friendly(n.id)) continue;
-        const fallen = m.fallenAllies && m.fallenAllies[n.id];
+        const fallen = m.fallenAllies[n.id];
         if (n.type === 'city' && !Q.conquerCities && !(fallen && Q.ally)) continue;
         if (n.type === 'capital' && s.turn < Q.berlinFrom) continue;
         const ap = c.approach(m.armyAt, n.id);

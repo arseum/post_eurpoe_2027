@@ -1,6 +1,6 @@
 const Sfx = (() => {
     const KEY = 'pe2147_sound';
-    let ctx = null, master = null, ambient = null;
+    let ctx = null, master = null, ambient = false, noiseBuf = null;
     let on = true;
     try {
         on = localStorage.getItem(KEY) !== '0';
@@ -42,11 +42,13 @@ const Sfx = (() => {
         const c = ensure();
         if (!c || !on) return;
         const t0 = c.currentTime + (opts.delay || 0);
-        const buf = c.createBuffer(1, Math.ceil(c.sampleRate * dur), c.sampleRate);
-        const d = buf.getChannelData(0);
-        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        if (!noiseBuf) {
+            noiseBuf = c.createBuffer(1, c.sampleRate, c.sampleRate);
+            const d = noiseBuf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        }
         const src = c.createBufferSource();
-        src.buffer = buf;
+        src.buffer = noiseBuf;
         const f = c.createBiquadFilter();
         f.type = opts.filter || 'lowpass';
         f.frequency.value = opts.freq || 1200;
@@ -56,7 +58,7 @@ const Sfx = (() => {
         src.connect(f);
         f.connect(g);
         g.connect(master);
-        src.start(t0);
+        src.start(t0, Math.random() * (1 - dur), dur);
     }
 
     function chord(notes, dur, opts = {}) {
@@ -124,18 +126,17 @@ const Sfx = (() => {
         lfoGain.gain.value = 160;
         lfo.connect(lfoGain);
         lfoGain.connect(f.frequency);
-        const oscs = [55, 82.4, 110.2].map(fr => {
+        [55, 82.4, 110.2].forEach(fr => {
             const o = c.createOscillator();
             o.type = 'sawtooth';
             o.frequency.value = fr;
             o.connect(f);
             o.start();
-            return o;
         });
         f.connect(g);
         g.connect(master);
         lfo.start();
-        ambient = {oscs, lfo};
+        ambient = true;
     }
 
     function unlock() {
@@ -149,7 +150,6 @@ const Sfx = (() => {
         try {
             localStorage.setItem(KEY, on ? '1' : '0');
         } catch (e) {
-            return on;
         }
         if (ensure()) {
             master.gain.setTargetAtTime(on ? 0.5 : 0, ctx.currentTime, 0.05);

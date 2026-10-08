@@ -34,9 +34,10 @@ jobs:
           echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
           echo "Version: $VERSION"
           
-      - name: Generate version.js
+      - name: Generate version.js and cache keys
         run: |
           sed "s|__APP_VERSION__|${APP_VERSION}|g" js/version.template.js > js/version.js
+          sed -i "s|__APP_VERSION__|${APP_VERSION}|g" index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
