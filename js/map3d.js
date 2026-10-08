@@ -20,6 +20,11 @@ let resizeObserver = null;
 let rafId = null;
 let clock = null;
 let heightField = null;
+let sunLight = null;
+let skyLight = null;
+let dayCycle = null;
+const SUN_DAY = new THREE.Color(0xfff1dc);
+const SUN_DUSK = new THREE.Color(0xff8a4a);
 
 const nodesById = new Map();
 const meshToNodeId = new Map();
@@ -255,10 +260,11 @@ function buildTerrain() {
 function buildScene() {
     scene = new THREE.Scene();
     scene.fog = new THREE.Fog(0x04080f, 30, 70);
-    scene.add(new THREE.HemisphereLight(0x9ab8d8, 0x101820, 0.8));
-    const sun = new THREE.DirectionalLight(0xfff1dc, 2.1);
-    sun.position.set(-9, 7, -4);
-    scene.add(sun);
+    skyLight = new THREE.HemisphereLight(0x9ab8d8, 0x101820, 0.8);
+    scene.add(skyLight);
+    sunLight = new THREE.DirectionalLight(0xfff1dc, 2.1);
+    sunLight.position.set(-9, 7, -4);
+    scene.add(sunLight);
     const rim = new THREE.DirectionalLight(0x5fa8c8, 0.35);
     rim.position.set(6, 4, 8);
     scene.add(rim);
@@ -681,8 +687,29 @@ function animate() {
     }
     waveFlags(t);
     updatePulses(dt);
+    updateDayCycle(dt);
     renderer.render(scene, camera);
     labelRenderer.render(scene, camera);
+}
+
+function updateDayCycle(dt) {
+    if (!dayCycle) return;
+    dayCycle.k = Math.min(1, dayCycle.k + dt / dayCycle.dur);
+    const k = dayCycle.k;
+    const night = Math.sin(Math.PI * k);
+    sunLight.intensity = 2.1 * (1 - night * 0.82);
+    sunLight.color.copy(SUN_DAY).lerp(SUN_DUSK, Math.min(1, night * 1.6) * (1 - Math.pow(night, 6)));
+    skyLight.intensity = 0.8 * (1 - night * 0.6);
+    if (k >= 1) {
+        sunLight.intensity = 2.1;
+        sunLight.color.copy(SUN_DAY);
+        skyLight.intensity = 0.8;
+        dayCycle = null;
+    }
+}
+
+function passDay(ms = 1800) {
+    if (sunLight) dayCycle = { k: 0, dur: ms / 1000 };
 }
 
 function mount(el) {
@@ -784,4 +811,4 @@ function pulse(id, color = 0x0ac8b9) {
     if (scene) spawnPulse(id, color);
 }
 
-window.Map3D = { mount, sync, onSelect, stop, setAttract, focus, pulse };
+window.Map3D = { mount, sync, onSelect, stop, setAttract, focus, pulse, passDay };

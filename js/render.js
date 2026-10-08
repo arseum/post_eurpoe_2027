@@ -113,8 +113,12 @@ function initKeys() {
     });
 }
 
+function ttHtml(title, body) {
+    return `<div class="tt-title">${title}</div><div class="tt-row">${body}</div>`;
+}
+
 function tt(title, body) {
-    return esc(`<div class="tt-title">${title}</div><div class="tt-row">${body}</div>`);
+    return esc(ttHtml(title, body));
 }
 
 function unitTtData(u) {
@@ -157,7 +161,7 @@ function renderTop() {
     }
     lastCommand = state.command;
     document.getElementById('cmd').innerHTML = `<span class="cmd-label">Commandement</span><span class="pips">${pips}</span>`;
-    document.getElementById('cmd').dataset.tt = tt('Points de commandement', `Bâtir, améliorer, rechercher, déplacer l'armée, attaquer, fortifier ou s'allier coûte <span>1 point</span>.<br>Recruter est gratuit. Les points reviennent à chaque tour.`);
+    document.getElementById('cmd').dataset.tt = ttHtml('Points de commandement', `Bâtir, améliorer, rechercher, déplacer l'armée, attaquer, fortifier ou s'allier coûte <span>1 point</span>.<br>Recruter est gratuit. Les points reviennent à chaque tour.`);
 }
 
 function setCenterView(v) {
@@ -580,6 +584,78 @@ function renderEndTurn() {
     const b = document.getElementById('btn-endturn');
     b.classList.toggle('ready', state.command === 0);
     b.innerHTML = `<span class="et-inner">${ic('sun-horizon')}<span class="et-label">Fin du tour</span><span class="et-num">${state.turn} → ${state.turn + 1}</span></span>`;
+}
+
+function requestEndTurn() {
+    if (state.phase !== 'build' || endTurnBusy || dayVeilBusy) return;
+    if (state.command > 0 && endConfirmPref()) return showEndTurnConfirm();
+    passDay();
+}
+
+function showEndTurnConfirm() {
+    const n = state.command;
+    const ov = document.getElementById('confirm-overlay');
+    ov.innerHTML = `<div class="confirm-box plate" role="alertdialog" aria-labelledby="cf-title"><div class="eyebrow">Fin du tour ${state.turn}</div><h2 id="cf-title">Des ordres restent à donner</h2><div class="rule"></div><p>Les points de commandement ne se cumulent pas : ceux qui ne sont pas utilisés sont perdus à la fin du tour.</p><div class="fact">${ic('diamond')}<span class="fact-l">${n} point${n > 1 ? 's' : ''} de commandement inutilisé${n > 1 ? 's' : ''}</span><span class="force">sur ${getCommandMax()}</span></div><label class="ask-again"><input type="checkbox" id="cf-skip"><span>Ne plus me demander</span></label><div class="confirm-actions"><button class="btn btn-primary" onclick="closeConfirm()">${ic('arrow-left')}Revenir aux ordres</button><button class="btn btn-ghost" onclick="confirmEndTurn()">${ic('sun-horizon')}Finir le tour</button></div></div>`;
+    ov.onclick = e => {
+        if (e.target === ov) closeConfirm();
+    };
+    ov.classList.add('active');
+    ov.querySelector('.btn-primary').focus();
+}
+
+function confirmEndTurn() {
+    const skip = document.getElementById('cf-skip');
+    if (skip && skip.checked) setEndConfirmPref(false);
+    closeConfirm();
+    passDay();
+}
+
+const END_CONFIRM_KEY = 'pe2147_end_confirm';
+
+function endConfirmPref() {
+    try {
+        return localStorage.getItem(END_CONFIRM_KEY) !== '0';
+    } catch (e) {
+        return true;
+    }
+}
+
+function setEndConfirmPref(on) {
+    try {
+        localStorage.setItem(END_CONFIRM_KEY, on ? '1' : '0');
+    } catch (e) {
+    }
+    endConfirmOptionInit();
+}
+
+function endConfirmOptionInit() {
+    const el = document.getElementById('opt-end-confirm');
+    if (!el) return;
+    const on = endConfirmPref();
+    el.classList.toggle('on', on);
+    el.setAttribute('aria-checked', on ? 'true' : 'false');
+}
+
+let dayVeilBusy = false;
+
+function passDay() {
+    if (state.phase !== 'build' || endTurnBusy || dayVeilBusy) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return endTurn();
+    dayVeilBusy = true;
+    const veil = document.getElementById('day-veil');
+    veil.innerHTML = `<div class="dv-inner"><div class="dv-sun">${ic('sun-horizon')}</div><div class="eyebrow">Une nuit passe sur l'Europe</div><div class="dv-turns"><span class="dv-old">${state.turn}</span><span class="dv-new">${state.turn + 1}</span></div><div class="dv-label">Tour</div><div class="rule"></div></div>`;
+    veil.classList.remove('out');
+    veil.classList.add('on');
+    if (window.Map3D && Map3D.passDay) Map3D.passDay(1900);
+    setTimeout(() => {
+        endTurn();
+        veil.classList.add('out');
+        setTimeout(() => {
+            veil.classList.remove('on', 'out');
+            veil.innerHTML = '';
+            dayVeilBusy = false;
+        }, 700);
+    }, 1150);
 }
 
 function toast(text, kind = '') {

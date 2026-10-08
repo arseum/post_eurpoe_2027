@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600&family=Marcellus+SC&display=swap">
     <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/duotone/style.css">
     <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/fill/style.css">
-    <link rel="stylesheet" href="style.css?v=50">
+    <link rel="stylesheet" href="style.css?v=51">
     <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"}}
     </script>
@@ -34,7 +34,18 @@
             <span class="sw-track"><span class="sw-knob"></span></span>
             <span class="sw-label"><b>Guide de PROMETHEUS</b><small>Vous accompagne pendant les premiers tours</small></span>
         </button>
+        <button id="opt-end-confirm" class="switch on" role="switch" aria-checked="true" onclick="setEndConfirmPref(!endConfirmPref())">
+            <span class="sw-track"><span class="sw-knob"></span></span>
+            <span class="sw-label"><b>Confirmer la fin de tour</b><small>Quand des points de commandement restent inutilisés</small></span>
+        </button>
     </main>
+    <footer class="signature">
+        <span>Arsène Maître</span>
+        <a href="https://arseum.github.io/portfolio/" target="_blank" rel="noopener" aria-label="Portfolio" data-tt="Portfolio"><i class="ph-duotone ph-globe-simple"></i></a>
+        <a href="https://github.com/arseum" target="_blank" rel="noopener" aria-label="GitHub" data-tt="GitHub"><i class="ph-duotone ph-github-logo"></i></a>
+        <a href="https://www.linkedin.com/in/arsene-maitre" target="_blank" rel="noopener" aria-label="LinkedIn" data-tt="LinkedIn"><i class="ph-duotone ph-linkedin-logo"></i></a>
+        <a href="mailto:maitrearsene213@gmail.com" aria-label="E-mail" data-tt="maitrearsene213@gmail.com"><i class="ph-duotone ph-envelope-simple"></i></a>
+    </footer>
     <div class="version-tag" id="version-label"></div>
 </div>
 
@@ -75,7 +86,7 @@
         <button id="vs-base" onclick="setCenterView('base')"><i class="ph-duotone ph-castle-turret"></i>Alpha-7</button>
     </div>
 
-    <button id="btn-endturn" class="hud build-only" onclick="endTurn()" aria-label="Fin du tour"></button>
+    <button id="btn-endturn" class="hud build-only" onclick="requestEndTurn()" aria-label="Fin du tour"></button>
 
     <div id="battle-hud" class="hud">
         <div id="battle-top"></div>
@@ -101,22 +112,23 @@
 <div id="chapter-overlay" class="overlay"></div>
 <div id="research-overlay" class="overlay"></div>
 <div id="confirm-overlay" class="overlay"></div>
+<div id="day-veil" aria-hidden="true"></div>
 <div id="phase-fade"></div>
 <div id="end-screen" class="screen">
     <div id="end-content" class="plate"></div>
 </div>
 
-<script type="module" src="js/scene3d.js?v=50"></script>
-<script type="module" src="js/base3d.js?v=50"></script>
-<script type="module" src="js/map3d.js?v=50"></script>
-<script type="module" src="js/fx3d.js?v=50"></script>
-<script src="js/version.js?v=50"></script>
-<script src="js/geo-europe.js?v=50"></script>
-<script src="js/audio.js?v=50"></script>
-<script src="js/data.js?v=50"></script>
-<script src="js/game.js?v=50"></script>
-<script src="js/render.js?v=50"></script>
-<script src="js/guide.js?v=50"></script>
+<script type="module" src="js/scene3d.js?v=51"></script>
+<script type="module" src="js/base3d.js?v=51"></script>
+<script type="module" src="js/map3d.js?v=51"></script>
+<script type="module" src="js/fx3d.js?v=51"></script>
+<script src="js/version.js?v=51"></script>
+<script src="js/geo-europe.js?v=51"></script>
+<script src="js/audio.js?v=51"></script>
+<script src="js/data.js?v=51"></script>
+<script src="js/game.js?v=51"></script>
+<script src="js/render.js?v=51"></script>
+<script src="js/guide.js?v=51"></script>
 <script>
     initTooltip();
     initKeys();
@@ -126,6 +138,7 @@
     setSpeed(1);
     checkContinue();
     guideOptionInit();
+    endConfirmOptionInit();
     difficultyInit();
     soundInit();
     document.addEventListener('DOMContentLoaded', mountTitleMap);

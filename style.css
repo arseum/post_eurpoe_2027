@@ -39,6 +39,7 @@
     --z-toast: 40;
     --z-overlay: 60;
     --z-guide: 70;
+    --z-day: 75;
     --z-fade: 80;
     --z-tooltip: 90
 }
@@ -462,8 +463,42 @@ button:focus-visible, [tabindex]:focus-visible {
     font-size: .8rem
 }
 
+.switch + .switch {
+    margin-top: 14px
+}
+
 .switch:hover .sw-track {
     border-color: var(--gold-1)
+}
+
+.signature {
+    position: absolute;
+    left: 20px;
+    bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: .7rem;
+    letter-spacing: .2em;
+    color: var(--dim)
+}
+
+.signature span {
+    margin-right: 6px
+}
+
+.signature a {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    font-size: .95rem;
+    color: var(--dim);
+    transition: color .2s
+}
+
+.signature a:hover, .signature a:focus-visible {
+    color: var(--gold-1)
 }
 
 .version-tag {
@@ -784,6 +819,57 @@ button:focus-visible, [tabindex]:focus-visible {
 .seg .speed-btn {
     flex: 1;
     width: auto
+}
+
+.ask-again {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    font-size: .85rem;
+    color: var(--text-2);
+    cursor: pointer;
+    user-select: none
+}
+
+.ask-again input {
+    appearance: none;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    border: 1px solid var(--gold-2);
+    background: rgba(4, 8, 15, .7);
+    cursor: pointer;
+    transition: border-color .2s, background .2s
+}
+
+.ask-again input::after {
+    content: '';
+    width: 7px;
+    height: 7px;
+    transform: rotate(45deg) scale(0);
+    background: var(--teal);
+    box-shadow: 0 0 8px rgba(10, 200, 185, .7);
+    transition: transform .2s var(--ease)
+}
+
+.ask-again input:checked {
+    border-color: var(--gold-1);
+    background: linear-gradient(180deg, #0c3c46, #072a33)
+}
+
+.ask-again input:checked::after {
+    transform: rotate(45deg) scale(1)
+}
+
+.ask-again:hover input {
+    border-color: var(--gold-1)
+}
+
+.ask-again:hover {
+    color: var(--text)
 }
 
 .confirm-actions {
@@ -2434,6 +2520,126 @@ body.in-battle .build-only {
 .result-overlay.lose h2 {
     color: #e59a8f;
     text-shadow: 0 0 30px rgba(200, 71, 60, .5)
+}
+
+#day-veil {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-day);
+    display: none;
+    place-items: center;
+    background: radial-gradient(ellipse at 50% 55%, rgba(8, 34, 44, .84), rgba(4, 8, 15, .96) 70%);
+    backdrop-filter: blur(4px);
+    pointer-events: all
+}
+
+#day-veil.on {
+    display: grid;
+    animation: fadeIn .5s ease both
+}
+
+#day-veil.out {
+    animation: dvOut .7s ease both
+}
+
+.dv-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    min-width: 260px
+}
+
+.dv-sun {
+    font-size: 2.6rem;
+    color: var(--gold-1);
+    filter: drop-shadow(0 0 18px rgba(200, 170, 110, .6));
+    animation: dvSun 1.6s var(--ease) both
+}
+
+.dv-turns {
+    position: relative;
+    height: 1.1em;
+    width: 3em;
+    overflow: hidden;
+    font-family: var(--font-display);
+    font-size: 4.6rem;
+    line-height: 1.1;
+    color: var(--gold-hi);
+    text-align: center;
+    text-shadow: 0 0 40px rgba(200, 170, 110, .45)
+}
+
+.dv-turns span {
+    position: absolute;
+    inset: 0
+}
+
+.dv-old {
+    animation: dvOld .55s .45s var(--ease) both
+}
+
+.dv-new {
+    animation: dvNew .55s .55s var(--ease) both
+}
+
+.dv-label {
+    font-family: var(--font-display);
+    letter-spacing: .3em;
+    text-transform: uppercase;
+    color: var(--text-2)
+}
+
+.dv-inner .rule {
+    width: 100%;
+    animation: dvRule .9s .3s var(--ease) both
+}
+
+@keyframes dvOut {
+    from {
+        opacity: 1
+    }
+    to {
+        opacity: 0
+    }
+}
+
+@keyframes dvSun {
+    from {
+        opacity: 0;
+        transform: translateY(18px)
+    }
+    to {
+        opacity: 1;
+        transform: none
+    }
+}
+
+@keyframes dvOld {
+    to {
+        opacity: 0;
+        transform: translateY(-100%)
+    }
+}
+
+@keyframes dvNew {
+    from {
+        opacity: 0;
+        transform: translateY(100%)
+    }
+    to {
+        opacity: 1;
+        transform: none
+    }
+}
+
+@keyframes dvRule {
+    from {
+        transform: scaleX(0)
+    }
+    to {
+        transform: scaleX(1)
+    }
 }
 
 #phase-fade {
