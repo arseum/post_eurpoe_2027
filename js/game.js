@@ -18,7 +18,8 @@ function makeMap() {
         transferTurn: 0,
         raided: {},
         fallenAllies: {},
-        gifted: {}
+        gifted: {},
+        ramparts: {}
     };
 }
 
@@ -48,7 +49,8 @@ function defaultState() {
         eventsSeen: [],
         phase: 'build',
         stats: newStats(),
-        guide: newGuide(false)
+        guide: newGuide(false),
+        resShown: {energy: true, materials: true}
     };
 }
 
@@ -107,6 +109,7 @@ function loadSave() {
         if (!state.map.raided) state.map.raided = {};
         if (!state.map.fallenAllies) state.map.fallenAllies = {};
         if (!state.map.gifted) state.map.gifted = {};
+        if (!state.map.ramparts) state.map.ramparts = {};
         return true;
     } catch (e) {
         return false;
@@ -252,8 +255,14 @@ function pulseNode(id, status) {
     if (window.Map3D) Map3D.pulse(id, status);
 }
 
+function resMax(k, s = state) {
+    if (k === 'stability') return RES_META.stability.max;
+    const i = Math.max(0, Math.min(2, (s.core || 1) - 1));
+    return k === 'influence' ? BALANCE.influenceByCore[i] : BALANCE.storageByCore[i];
+}
+
 function clampRes() {
-    for (const [k, m] of Object.entries(RES_META)) state.resources[k] = Math.min(m.max, Math.max(0, state.resources[k]));
+    for (const k of Object.keys(RES_META)) state.resources[k] = Math.min(resMax(k), Math.max(0, state.resources[k]));
 }
 
 function seededRng(seed) {
@@ -872,6 +881,68 @@ function sealAlliance(id, msg) {
     pulseNode(id, 'allied');
 }
 
+function canRefine() {
+    return state.phase === 'build' && isBuilt('centreDonnees') && state.refineTurn !== state.turn && state.command > 0 && (state.resources.materials || 0) >= BALANCE.refineCost;
+}
+
+function refineGain() {
+    return BALANCE.refineGain[Math.max(0, Math.min(2, getBuildingLevel('centreDonnees') - 1))];
+}
+
+function refineData() {
+    if (!canRefine() || !spendCommand(1)) return;
+    const gain = refineGain();
+    state.resources.materials -= BALANCE.refineCost;
+    state.resources.data += gain;
+    state.refineTurn = state.turn;
+    clampRes();
+    addLog('💾 Données raffinées : −' + BALANCE.refineCost + '🔩 +' + gain + '💾', 'build');
+    sfx('research');
+    save();
+    render();
+}
+
+function rampartLevel(id) {
+    return (state.map.ramparts || {})[id] || 0;
+}
+
+function rampartCost(id) {
+    return BALANCE.rampartCost[rampartLevel(id)] || null;
+}
+
+function canRampart(id) {
+    const cost = rampartCost(id);
+    return state.phase === 'build' && state.map.owner[id] === 'player' && cost !== null && state.command > 0 && (state.resources.materials || 0) >= cost;
+}
+
+function buildRampart(id) {
+    if (!canRampart(id) || !spendCommand(1)) return;
+    const cost = rampartCost(id);
+    state.resources.materials -= cost;
+    state.map.ramparts[id] = rampartLevel(id) + 1;
+    addLog('🏰 Remparts de ' + getNode(id).name + ' niveau ' + state.map.ramparts[id] + ' : +' + state.map.ramparts[id] * BALANCE.rampartDef + ' DEF permanente (−' + cost + '🔩)', 'build');
+    sfx('build');
+    save();
+    render();
+    pulseNode(id, 'player');
+}
+
+function canTruce(th) {
+    return !!th && !th.delayed && (state.resources.influence || 0) >= BALANCE.truceCost;
+}
+
+function negotiateTruce(i) {
+    const th = state.map.threats[i];
+    if (state.phase !== 'build' || !canTruce(th)) return;
+    state.resources.influence -= BALANCE.truceCost;
+    th.arrivesIn += BALANCE.truceDelay;
+    th.delayed = true;
+    addLog('🌐 Répit négocié : la menace sur ' + getNode(th.nodeId).name + ' arrive un tour plus tard (−' + BALANCE.truceCost + '🌐)', 'chapter');
+    sfx('alliance');
+    save();
+    render();
+}
+
 function fortifyNode(id) {
     const m = state.map;
     if (m.owner[id] !== 'player' || m.fortified[id]) return;
@@ -971,7 +1042,7 @@ function defenseUnits(nodeId) {
     const m = state.map;
     let units = buildUnitsFrom(m.garrisons[nodeId] || [], 'g');
     if (m.armyAt === nodeId && !m.armyDest) units = units.concat(buildUnitsFrom(state.army, 'a')).concat(buildHeroUnits());
-    const bonus = (m.fortified[nodeId] ? BALANCE.fortifyDef : 0) + (nodeId === 'alpha7' ? activeEffects().homeDef : 0);
+    const bonus = (m.fortified[nodeId] ? BALANCE.fortifyDef : 0) + (nodeId === 'alpha7' ? activeEffects().homeDef : 0) + rampartLevel(nodeId) * BALANCE.rampartDef;
     units.forEach(u => u.def += bonus);
     if (nodeId === 'alpha7' && activeEffects().homeRelief) units = units.concat(reliefUnits());
     return units;
@@ -1107,6 +1178,7 @@ async function resolveCombat(c) {
             m.owner[c.node] = 'hostile';
             m.garrisons[c.node] = [];
             delete m.allied[c.node];
+            delete m.ramparts[c.node];
             m.lost[c.node] = true;
             if (armyHere) {
                 state.army = [];
@@ -1354,7 +1426,10 @@ function onEvtChoice(i) {
     const ov = document.getElementById('event-overlay');
     const c = ov._choices[i];
     addLog('► ' + c.text, 'event');
-    if (c.effects) for (const [k, v] of Object.entries(c.effects)) state.resources[k] += v;
+    if (c.effects) for (const [k, v] of Object.entries(c.effects)) {
+        state.resources[k] += v;
+        if (state.resShown && v) state.resShown[k] = true;
+    }
     if (c.flags) Object.assign(state.flags, c.flags);
     if (c.ally && state.map.owner[c.ally] === 'neutral' && !state.map.allied[c.ally]) sealAlliance(c.ally);
     if (c.hint) addLog('↳ ' + c.hint, 'chapter');
@@ -1448,7 +1523,7 @@ function showEnding(id) {
     sfx('victory');
     pendingScreens = [];
     const e = ENDINGS[id];
-    document.getElementById('end-content').innerHTML = '<h1>' + e.title + '</h1><div class="end-sub">Victoire · ' + e.sub + ' · Tour ' + state.turn + '</div><div class="rule"></div><div class="end-text">' + e.text + '</div>' + recapHtml(id) + statsHtml() + '<button class="btn btn-primary" onclick="backToTitle()">Retour au menu</button>';
+    document.getElementById('end-content').innerHTML = '<h1>' + e.title + '</h1><div class="end-sub">Victoire · ' + e.sub + ' · Tour ' + state.turn + '</div><div class="rule"></div><div class="end-text">' + e.text + '</div><p class="end-demo">Fin de la démo : la campagne complète viendra plus tard.</p>' + recapHtml(id) + statsHtml() + '<button class="btn btn-primary" onclick="backToTitle()">Retour au menu</button>';
     showScreen('end-screen');
     deleteSave();
 }

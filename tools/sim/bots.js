@@ -498,6 +498,33 @@ function nodeValue(c, P, id) {
     return v;
 }
 
+function useTruce(c, need = 0.8) {
+    const m = c.m;
+    if (typeof c.G.canTruce !== 'function') return;
+    m.threats.forEach((th, i) => {
+        if (th.arrivesIn > 1 || !c.G.canTruce(th)) return;
+        if (m.allied[th.nodeId]) {
+            if (!c.G.alliedHolds(th)) c.G.negotiateTruce(i);
+            return;
+        }
+        if (th.nodeId !== 'alpha7' && m.owner[th.nodeId] !== 'player') return;
+        const e = c.defenseEstimate(th.nodeId, th.budget, th.seed, {fortify: true});
+        if (e.p < need) c.G.negotiateTruce(i);
+    });
+}
+
+function spendSurplus(c, reserve) {
+    if (typeof c.G.canRefine !== 'function') return;
+    const s = c.s, m = c.m;
+    if (c.cmd() > 0 && c.G.canRefine() && s.resources.materials - c.bal('refineCost') >= reserve) c.G.refineData();
+    const targets = ['alpha7'].concat(m.threats.map(t => t.nodeId)).concat(Object.keys(m.owner).filter(id => m.owner[id] === 'player'));
+    for (const id of targets) {
+        if (c.cmd() <= 0) break;
+        const cost = c.G.rampartCost(id);
+        if (cost !== null && c.G.canRampart(id) && s.resources.materials - cost >= reserve) c.G.buildRampart(id);
+    }
+}
+
 function openingRaid(c) {
     const s = c.s, m = c.m;
     const at = c.node(m.armyAt);
@@ -666,6 +693,7 @@ function makeBot(P) {
                 Q.garrisonReserve = {...Q.garrisonReserve, ...e};
             }
             upkeepGuard(c);
+            useTruce(c);
             defendHome(c, Q, plan);
             defendOutposts(c, Q, plan);
             defendAllies(c, Q, plan);
@@ -686,6 +714,7 @@ function makeBot(P) {
             fillGarrison(c, Q);
             if (Q.order.includes('diplo')) diplomacy(c, Q, plan);
             doEconomy(c, Q, plan, 9);
+            spendSurplus(c, 25);
             if (c.cmd() > 0 && Q.fortifyIdle) {
                 const th = c.m.threats.find(t => c.m.owner[t.nodeId] === 'player' && t.arrivesIn <= 1 && !c.m.fortified[t.nodeId]);
                 if (th) c.G.fortifyNode(th.nodeId);
@@ -891,6 +920,7 @@ function makeMedium(P) {
             if (Q.ally) for (const n of c.nodes().filter(x => x.type === 'city' && c.m.owner[x.id] === 'neutral' && !c.m.allied[x.id] && !wantsTake(Q, x.id))) {
                 if (c.cmd() > 0 && c.s.resources.influence >= c.G.getAllyCost(n) && c.rng() < 0.8) c.G.allyCity(n.id);
             }
+            if (c.rng() > Q.forgetHome) useTruce(c, 0.6);
             medEcon(c, Q, 1);
             for (const h of (c.D('HEROES') || [])) if (c.G.canRecruitHero(h) && c.rng() < 0.6) c.G.recruitHero(h.id);
             if (c.armyHome()) {
@@ -909,6 +939,7 @@ function makeMedium(P) {
                 if (u && c.afford(c.G.unitCost(c.unit(u.id)), {energy: 15, materials: 10})) recruitTo(c, u.id);
             }
             medEcon(c, Q, 0);
+            if (c.rng() < 0.6) spendSurplus(c, 15);
         },
         chooseEvent: (c, Q, choices) => medChooseEvent(c, Q, choices)
     };

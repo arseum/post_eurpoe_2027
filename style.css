@@ -302,6 +302,26 @@ button:focus-visible, [tabindex]:focus-visible {
     animation: rise .9s var(--ease) both
 }
 
+.end-demo {
+    margin: 14px 0 0;
+    font-family: var(--font-display);
+    letter-spacing: .08em;
+    color: var(--gold-1)
+}
+
+.demo-tag {
+    display: inline-block;
+    margin: 14px 0 18px;
+    padding: 3px 14px;
+    font-family: var(--font-display);
+    font-size: .82rem;
+    letter-spacing: .32em;
+    text-transform: uppercase;
+    color: var(--ink-0);
+    background: linear-gradient(90deg, var(--gold-2), var(--gold-1), var(--gold-2));
+    clip-path: polygon(8px 0, calc(100% - 8px) 0, 100% 50%, calc(100% - 8px) 100%, 8px 100%, 0 50%)
+}
+
 .title-block .eyebrow {
     margin-bottom: 18px;
     display: flex;
@@ -1950,6 +1970,48 @@ button:focus-visible, [tabindex]:focus-visible {
 
 .threat-card .t-eta span {
     transform: rotate(-45deg)
+}
+
+.threat-wrap {
+    display: flex;
+    gap: 4px;
+    align-items: stretch
+}
+
+.threat-wrap .threat-card {
+    flex: 1
+}
+
+.threat-truce {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-width: 58px;
+    padding: 4px 8px;
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .06em;
+    color: var(--influence);
+    background: linear-gradient(180deg, rgba(40, 32, 12, .92), rgba(10, 8, 6, .94));
+    border: 1px solid rgba(216, 178, 90, .5);
+    cursor: pointer;
+    transition: border-color .2s, transform .2s var(--ease)
+}
+
+.threat-truce i {
+    font-size: 1.2rem
+}
+
+.threat-truce:hover:not(:disabled) {
+    border-color: var(--influence);
+    transform: translateY(-2px)
+}
+
+.threat-truce:disabled {
+    opacity: .4;
+    cursor: not-allowed
 }
 
 .threat-card.danger {

@@ -177,11 +177,33 @@ function statsHtmlUnit(u) {
     return `<span class="stats"><span data-tt="${termTt('pv')}">PV<b>${u.hp}</b></span><span data-tt="${termTt('atk')}">ATK<b>${u.atk}</b></span><span data-tt="${termTt('def')}">DEF<b>${u.def}</b></span><span data-tt="${termTt('vit')}">VIT<b>${u.spd}</b></span></span>`;
 }
 
+function resShown(k) {
+    return !state.resShown || !!state.resShown[k];
+}
+
+function revealRes(k) {
+    if (resShown(k)) return;
+    state.resShown[k] = true;
+    toast('Nouvelle ressource : ' + RES_META[k].label, 'chapter');
+    save();
+}
+
+function checkResReveal() {
+    if (!state.resShown) return;
+    const researchOpen = document.getElementById('research-overlay').classList.contains('active');
+    if (state.turn >= 2 || researchOpen || isBuilt('centreDonnees') || state.research.length) revealRes('data');
+    if (state.turn >= 3 || state.map.threats.length) revealRes('stability');
+    const cityPicked = selectedNode && getNode(selectedNode).type === 'city';
+    if (state.chapter >= 2 || state.turn >= 5 || cityPicked || alliedCities(state)) revealRes('influence');
+}
+
 function renderTop() {
+    checkResReveal();
     const prod = getCampaignProduction();
     const bumped = [];
     let html = '';
     for (const [k, meta] of Object.entries(RES_META)) {
+        if (!resShown(k)) continue;
         const v = state.resources[k];
         const p = prod[k] + (k === 'stability' ? stabilityDrift() : 0);
         const critical = k === 'stability' && v <= 20;
@@ -189,8 +211,9 @@ function renderTop() {
         const upkeep = k === 'energy' ? getUpkeep() : 0;
         const cities = MAP_NODES.map(n => [n, cityDividend(n)]).filter(([, d]) => d && d.prod[k]).map(([n, d]) => `<br>Dont ${esc(n.name)}, ${esc(d.name)} <span>+${d.prod[k]}</span>`).join('');
         const g = GLOSSARY[{stability: 'stabilite', influence: 'influence'}[k]];
-        const body = (g ? `<div class="tt-def">${richText(g.text)}</div>` : '') + `Réserve <span>${v} / ${meta.max}</span><br>Par tour <span>${p >= 0 ? '+' : ''}${p}</span>` + cities + (upkeep ? `<br>Dont entretien des unités <span>−${upkeep}</span>` : '') + (critical ? '<br><span style="color:var(--danger)">Stabilité critique : risque de révolte</span>' : '');
-        html += `<div class="res${critical ? ' critical' : ''}${bumped.includes(k) ? ' bump' : ''}" data-tt="${tt(meta.label, body)}">${resIcon(k)}<span class="res-val">${v}</span><span class="res-prod${p < 0 ? ' neg' : ''}">${p >= 0 ? '+' : ''}${p}</span></div>`;
+        const cap = k === 'stability' ? '' : `<br><small>Éveiller le Cœur augmente la réserve max.</small>`;
+        const body = (g ? `<div class="tt-def">${richText(g.text)}</div>` : '') + `Réserve <span>${v} / ${resMax(k)}</span>${cap}<br>Par tour <span>${p >= 0 ? '+' : ''}${p}</span>` + cities + (upkeep ? `<br>Dont entretien des unités <span>−${upkeep}</span>` : '') + (critical ? '<br><span style="color:var(--danger)">Stabilité critique : risque de révolte</span>' : '');
+        html += `<div class="res ${k}${critical ? ' critical' : ''}${bumped.includes(k) ? ' bump' : ''}" data-tt="${tt(meta.label, body)}">${resIcon(k)}<span class="res-val">${v}</span><span class="res-prod${p < 0 ? ' neg' : ''}">${p >= 0 ? '+' : ''}${p}</span></div>`;
     }
     lastResources = {...state.resources};
     document.getElementById('res-plates').innerHTML = html;
@@ -225,6 +248,7 @@ function selectNode(id) {
     selectedNode = id;
     if (centerView !== 'map') centerView = 'map';
     renderBuildPhase();
+    if (state.resShown && !state.resShown.influence) renderTop();
 }
 
 function selectBase(id) {
@@ -535,6 +559,8 @@ function renderNodePanel() {
     }
     if (owned) {
         const g = m.garrisons[id] || [];
+        const rl = rampartLevel(id);
+        if (rl) body += `<div class="fact">${ic('castle-turret')}<span class="fact-l">${glossText('Remparts niveau ' + rl + ' : +' + rl * BALANCE.rampartDef + ' DEF permanente')}</span></div>`;
         body += `<div class="fact">${ic('users-three')}<span class="fact-l">${glossText('Garnison')}</span><span class="force">${g.length ? g.length + ' unité(s)' : '<span style="color:var(--danger)">aucune</span>'}</span></div>`;
     }
     if (node.type === 'home') {
@@ -557,6 +583,13 @@ function renderNodePanel() {
         ally: allyAction(node, action)
     } : {});
     body += '<div class="np-actions">';
+    if (owned) {
+        const lvl = rampartLevel(id), rc = rampartCost(id);
+        if (rc !== null) {
+            const short = (state.resources.materials || 0) < rc;
+            body += action('castle-turret', `Remparts niv. ${lvl + 1}`, `buildRampart('${id}')`, blockReason(null, true) || (short ? 'Matériaux insuffisants' : ''), `<span class="${short ? 'short' : ''}">${resIcon('materials')}${rc}</span>`);
+        }
+    }
     if (owned && !m.fortified[id]) {
         body += action('wall', 'Fortifier', `fortifyNode('${id}')`, blockReason(null, true), '<span>+' + BALANCE.fortifyDef + ' DEF</span>');
     } else if (owned && m.fortified[id]) {
@@ -634,6 +667,11 @@ function renderBasePanel(el) {
         body += `<button class="btn btn-primary" ${reason ? 'disabled' : ''} data-tt="${esc(reason)}" onclick="${isCore ? 'upgradeCore()' : `upgradeBuilding('${b.id}')`}"><span class="lbl">${ic('arrow-up')}${isCore ? 'Éveiller' : 'Améliorer'}</span><span class="cost">${costSpans(cost)}${cmdChip()}</span></button>`;
     } else {
         body += `<div class="fact">${ic('seal-check')}<span class="fact-l">Niveau maximum atteint</span></div>`;
+    }
+    if (b && b.id === 'centreDonnees') {
+        const used = state.refineTurn === state.turn;
+        const reason = used ? 'Déjà raffiné ce tour' : blockReason({materials: BALANCE.refineCost}, true);
+        body += `<button class="btn btn-primary" ${reason ? 'disabled' : ''} data-tt="${tt('Raffiner les données', richText(GLOSSARY.raffiner.text))}" onclick="refineData()"><span class="lbl">${ic('flask')}Raffiner · +${refineGain()}${resIcon('data')}</span><span class="cost">${costSpans({materials: BALANCE.refineCost})}${cmdChip()}</span></button>`;
     }
     body += '</div>';
     el.style.setProperty('--st', 'var(--st-player)');
@@ -734,7 +772,9 @@ function renderThreats() {
         const odds = own ? defenseOdds(t) : null;
         const oddsTxt = own ? ` · <span class="odds-inline ${oddsClass(odds)}">${odds === null ? 'sans défense' : oddsPct(odds) + ' de tenir'}</span>` : '';
         const danger = own && (odds === null || odds < 0.6);
-        return `<button class="threat-card${t.arrivesIn <= 1 ? ' imminent' : ''}${danger ? ' danger' : ''}" onclick="focusThreat('${t.nodeId}')" data-tt="${esc('Voir ' + n.name + (own ? ' — chances estimées avec la garnison actuelle' : ''))}"><span class="t-eta"><span>${t.arrivesIn}</span></span><span><span class="t-name">${esc(n.name)}</span><br><span class="t-sub">${units} assaillants · ${t.arrivesIn > 1 ? 'dans ' + t.arrivesIn + ' tours' : 'au prochain tour'}${oddsTxt}</span></span></button>`;
+        const i = state.map.threats.indexOf(t);
+        const truce = resShown('influence') && (own || t.nodeId === 'alpha7' || state.map.allied[t.nodeId]) && !t.delayed ? `<button class="threat-truce" ${canTruce(t) ? '' : 'disabled'} onclick="negotiateTruce(${i})" data-tt="${tt('Négocier un répit', richText(GLOSSARY.repit.text) + '<br>Coût <span>' + BALANCE.truceCost + '🌐</span>')}" aria-label="Négocier un répit">${ic('handshake')}<span>+1 tour</span></button>` : '';
+        return `<div class="threat-wrap"><button class="threat-card${t.arrivesIn <= 1 ? ' imminent' : ''}${danger ? ' danger' : ''}" onclick="focusThreat('${t.nodeId}')" data-tt="${esc('Voir ' + n.name + (own ? ' — chances estimées avec la garnison actuelle' : ''))}"><span class="t-eta"><span>${t.arrivesIn}</span></span><span><span class="t-name">${esc(n.name)}</span><br><span class="t-sub">${units} assaillants · ${t.arrivesIn > 1 ? 'dans ' + t.arrivesIn + ' tours' : 'au prochain tour'}${t.delayed ? ' · répit obtenu' : ''}${oddsTxt}</span></span></button>${truce}</div>`;
     }).join('');
 }
 

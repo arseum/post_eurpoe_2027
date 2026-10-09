@@ -116,7 +116,7 @@ const GUIDE_STEPS = [
         target: () => nodeLabel('alpha7'), ack: true
     },
     {
-        text: 'Voici nos réserves : énergie, matériaux, données, stabilité et influence. Survolez-les pour voir le gain de chaque tour. Une règle avant tout : si l\'<b>énergie</b> ou la <b>stabilité</b> tombe à zéro, le dôme s\'éteint.',
+        text: 'Pour l\'instant, deux réserves : l\'<b>énergie</b> et les <b>matériaux</b>. D\'autres s\'ajouteront à mesure que le dôme s\'éveille. Survolez-les pour voir le gain de chaque tour. Une règle avant tout : si l\'énergie tombe à zéro, le dôme s\'éteint.',
         target: () => gq('#res-plates'), ack: true
     },
     {
@@ -251,6 +251,36 @@ const GUIDE_TIPS = [
         trigger: s => s.phase === 'build' && s.chapter >= 2,
         target: () => nodeLabel('outpost'),
         text: 'Les avant-postes de <b>Strasbourg</b> et <b>Munich</b> ravitaillent Berlin. Chacun pris affaiblit sa garnison avant l\'assaut final.'
+    },
+    {
+        id: 'resData', urgent: true,
+        trigger: s => s.phase === 'build' && !!s.resShown && !!s.resShown.data,
+        target: () => gq('#res-plates .res.data') || gq('#res-plates'),
+        text: 'Mon cortex se réveille. Les <b>données</b> alimentent la recherche : c\'est notre ressource la plus rare. Le Centre de données en produit, et nos matériaux en trop peuvent y être raffinés.'
+    },
+    {
+        id: 'resStability', urgent: true,
+        trigger: s => s.phase === 'build' && !!s.resShown && !!s.resShown.stability,
+        target: () => gq('#res-plates .res.stability') || gq('#res-plates'),
+        text: 'Les habitants du dôme ont peur. La <b>stabilité</b> mesure leur moral : sous 30, nos unités faiblissent, et à 0 c\'est la révolte. Les sièges, les pertes et l\'occupation la font baisser.'
+    },
+    {
+        id: 'resInfluence', urgent: true,
+        trigger: s => s.phase === 'build' && !!s.resShown && !!s.resShown.influence,
+        target: () => gq('#res-plates .res.influence') || gq('#res-plates'),
+        text: 'Les cités libres nous écoutent enfin. L\'<b>influence</b> scelle les alliances, et permet de négocier un répit quand une menace approche.'
+    },
+    {
+        id: 'surplus',
+        trigger: s => s.phase === 'build' && s.resources.materials >= resMax('materials') * 0.8,
+        target: () => railBtn('dome'),
+        text: 'Nos entrepôts débordent : au-delà de la réserve max, la production est perdue. Raffinez des données au <b>Centre de données</b>, élevez des <b>remparts</b> sur nos territoires, ou éveillez le Cœur pour agrandir les réserves.'
+    },
+    {
+        id: 'truce',
+        trigger: s => s.phase === 'build' && !!s.resShown && !!s.resShown.influence && s.map.threats.some(t => !t.delayed && (t.nodeId === 'alpha7' || s.map.owner[t.nodeId] === 'player' || s.map.allied[t.nodeId])) && s.resources.influence >= BALANCE.truceCost,
+        target: () => gq('#threats .threat-truce:not(:disabled)'),
+        text: 'Une menace approche, mais la diplomatie a ses armes : contre de l\'influence, je peux négocier un <b>répit</b> d\'un tour. Le temps de ramener l\'armée ou de renforcer la garnison.'
     },
     {
         id: 'cityConquered',

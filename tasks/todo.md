@@ -196,3 +196,11 @@ Experts 88/90/90 %, moyen 44 %, les 6 fins obtenues sur 50 parties, victoire typ
 - [x] Étape 2 : portrait SVG de PROMETHEUS, voix mot à mot, clic / Espace pour finir puis passer (relance si la carte est masquée en cours de frappe)
 - [x] Étape 3 : tutoriel en 17 étapes jusqu'au premier combat et au retour de l'armée, objectifs « Attaquer X · % · tours » et « Assaut en cours »
 - [x] Étape 4 : tests Chrome (tutoriel complet tour 1 → tour 2, clic et Espace, combat, retour), documentation
+
+## Ressources qui comptent (spec : `tasks/spec-ressources.md`, 2026-10-09)
+
+- [x] Règles : réserves plafonnées par le Cœur (`resMax`), raffiner (Centre de données), remparts (DEF permanente), répit négocié (y compris pour les alliées). Ordre d'urgence abandonné après mesure, avec l'accord de l'utilisateur
+- [x] Harnais : `spendSurplus` et `useTruce` dans les bots, indicateur « points inutilisés », réglage sur 8 graines (voir spec)
+- [x] Interface : apparition progressive des ressources, Raffiner dans le panneau du Centre, Remparts dans le panneau de territoire, répit sur les cartes de menace, réserve max dans les infobulles, 5 conseils et 4 termes
+- [x] Libellé « Démo » (titre, version, écran de fin de victoire)
+- [x] Tests Chrome (apparition des ressources, remparts, raffinage, répit, badge Démo), documentation

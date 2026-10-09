@@ -23,6 +23,7 @@
     <main class="title-block">
         <div class="eyebrow">Europe · An 2147</div>
         <h1>Post-Europe<span>2147</span></h1>
+        <div class="demo-tag">Démo</div>
         <p class="pitch">Sous le dôme d'Alpha-7, PROMETHEUS s'éveille. Rallie ou soumets les cités libres, brise les verrous d'Hegemonia et marche sur Berlin.</p>
         <div class="menu-buttons">
             <button class="btn btn-primary" id="btn-continue" onclick="continueGame()"><i class="ph-duotone ph-play"></i>Continuer</button>
@@ -131,8 +132,8 @@
     initTooltip();
     initKeys();
     const _v = typeof VERSION !== 'undefined' ? VERSION : 'dev';
-    document.getElementById('version-label').textContent = 'v' + _v;
-    document.getElementById('game-version-label').textContent = 'v' + _v;
+    document.getElementById('version-label').textContent = 'v' + _v + ' · démo';
+    document.getElementById('game-version-label').textContent = 'v' + _v + ' · démo';
     setSpeed(1);
     checkContinue();
     guideOptionInit();

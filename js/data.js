@@ -73,7 +73,15 @@ const BALANCE = {
     exodeEnergy: 100,
     upkeepEnergyPerSize: 0.5,
     reliefBase: 6,
-    reliefSlope: 0.6
+    reliefSlope: 0.6,
+    storageByCore: [60, 120, 200],
+    influenceByCore: [30, 40, 50],
+    refineCost: 25,
+    refineGain: [5, 7, 9],
+    rampartCost: [25, 40, 60],
+    rampartDef: 1,
+    truceCost: 12,
+    truceDelay: 1
 };
 
 const BALANCE_BASE = {...BALANCE};
@@ -764,6 +772,10 @@ const GLOSSARY = {
     occupation: {match: 'occupation', title: 'Occupation', text: 'Prendre une cité libre coûte −10🏛️ et −5🌐 tout de suite, puis −1🏛️ par tour tant que vous la tenez.'},
     repli: {match: 'repli', title: 'Repli', text: "Pendant un assaut, si l'armée passe sous le seuil de PV choisi, elle se replie au lieu de périr. Le seuil se règle dans « Préparer l'assaut »."},
     milice: {match: 'milices?', title: 'Milice', text: 'Combattants fournis par une cité alliée. Ils se battent à vos côtés le temps du combat, puis repartent.'},
+    remparts: {match: 'remparts', title: 'Remparts', text: 'Défenses permanentes d\'un territoire, en 3 niveaux payés en matériaux : +1 DEF par niveau pour ses défenseurs, à chaque combat. Ils sont détruits si le territoire tombe.'},
+    raffiner: {match: 'raffin(?:er|ez|ées?)', title: 'Raffiner les données', text: 'Au Centre de données, une fois par tour : 1 point de commandement et 25🔩 donnent des données (5, 7 ou 9💾 selon le niveau du Centre). Le surplus de matériaux nourrit la recherche.'},
+    repit: {match: 'répit', title: 'Répit négocié', text: 'Contre 12🌐, une menace sur Alpha-7, un territoire ou une cité alliée arrive un tour plus tard. Une seule fois par menace, sans point de commandement.'},
+    reserveMax: {match: 'réserve max', title: 'Réserve max', text: 'Au-delà, la production est perdue. Énergie, matériaux et données : 60, puis 120, puis 200 selon le niveau du Cœur. Influence : 30, 40, 50.'},
     fortifier: {match: 'fortifiée?s?|fortifier', title: 'Fortifier', text: 'Coûte 1 point de commandement : +3 DEF pour les défenseurs du territoire au prochain combat qui s\'y déroule.'}
 };
 
