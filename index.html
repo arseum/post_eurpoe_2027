@@ -34,10 +34,6 @@
             <span class="sw-track"><span class="sw-knob"></span></span>
             <span class="sw-label"><b>Guide de PROMETHEUS</b><small>Vous accompagne pendant les premiers tours</small></span>
         </button>
-        <button id="opt-end-confirm" class="switch on" role="switch" aria-checked="true" onclick="setEndConfirmPref(!endConfirmPref())">
-            <span class="sw-track"><span class="sw-knob"></span></span>
-            <span class="sw-label"><b>Confirmer la fin de tour</b><small>Quand des points de commandement restent inutilisés</small></span>
-        </button>
     </main>
     <footer class="signature">
         <span>Arsène Maître</span>
@@ -138,7 +134,6 @@
     setSpeed(1);
     checkContinue();
     guideOptionInit();
-    endConfirmOptionInit();
     difficultyInit();
     soundInit();
     document.addEventListener('DOMContentLoaded', mountTitleMap);

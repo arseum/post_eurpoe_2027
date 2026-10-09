@@ -462,10 +462,6 @@ button:focus-visible, [tabindex]:focus-visible {
     font-size: .8rem
 }
 
-.switch + .switch {
-    margin-top: 14px
-}
-
 .switch:hover .sw-track {
     border-color: var(--gold-1)
 }

@@ -599,23 +599,21 @@ function renderEndTurn() {
 
 function requestEndTurn() {
     if (state.phase !== 'build' || endTurnBusy || dayVeilBusy) return;
-    if (state.command > 0 && endConfirmPref()) return showEndTurnConfirm();
+    if (state.command > 0 && !state.skipEndConfirm) return showEndTurnConfirm();
     passDay();
 }
 
 function showEndTurnConfirm() {
     const n = state.command;
-    openConfirm(`<div class="confirm-box plate" role="alertdialog" aria-labelledby="cf-title"><div class="eyebrow">Fin du tour ${state.turn}</div><h2 id="cf-title">Des ordres restent à donner</h2><div class="rule"></div><p>Les points de commandement ne se cumulent pas : ceux qui ne sont pas utilisés sont perdus à la fin du tour.</p><div class="fact">${ic('diamond')}<span class="fact-l">${n} point${n > 1 ? 's' : ''} de commandement inutilisé${n > 1 ? 's' : ''}</span><span class="force">sur ${getCommandMax()}</span></div><label class="ask-again"><input type="checkbox" id="cf-skip"><span>Ne plus me demander</span></label><div class="confirm-actions"><button class="btn btn-primary" onclick="closeConfirm()">${ic('arrow-left')}Revenir aux ordres</button><button class="btn btn-ghost" onclick="confirmEndTurn()">${ic('sun-horizon')}Finir le tour</button></div></div>`).querySelector('.btn-primary').focus();
+    openConfirm(`<div class="confirm-box plate" role="alertdialog" aria-labelledby="cf-title"><div class="eyebrow">Fin du tour ${state.turn}</div><h2 id="cf-title">Des ordres restent à donner</h2><div class="rule"></div><p>Les points de commandement ne se cumulent pas : ceux qui ne sont pas utilisés sont perdus à la fin du tour.</p><div class="fact">${ic('diamond')}<span class="fact-l">${n} point${n > 1 ? 's' : ''} de commandement inutilisé${n > 1 ? 's' : ''}</span><span class="force">sur ${getCommandMax()}</span></div><label class="ask-again"><input type="checkbox" id="cf-skip"><span>Ne plus me demander pendant cette campagne</span></label><div class="confirm-actions"><button class="btn btn-primary" onclick="closeConfirm()">${ic('arrow-left')}Revenir aux ordres</button><button class="btn btn-ghost" onclick="confirmEndTurn()">${ic('sun-horizon')}Finir le tour</button></div></div>`).querySelector('.btn-primary').focus();
 }
 
 function confirmEndTurn() {
     const skip = document.getElementById('cf-skip');
-    if (skip && skip.checked) setEndConfirmPref(false);
+    if (skip && skip.checked) state.skipEndConfirm = true;
     closeConfirm();
     passDay();
 }
-
-const END_CONFIRM_KEY = 'pe2147_end_confirm';
 
 function prefGet(key, fallback = null) {
     try {
@@ -638,19 +636,6 @@ function syncSwitch(id, on) {
     if (!el) return;
     el.classList.toggle('on', on);
     el.setAttribute('aria-checked', on ? 'true' : 'false');
-}
-
-function endConfirmPref() {
-    return prefGet(END_CONFIRM_KEY) !== '0';
-}
-
-function setEndConfirmPref(on) {
-    prefSet(END_CONFIRM_KEY, on ? '1' : '0');
-    endConfirmOptionInit();
-}
-
-function endConfirmOptionInit() {
-    syncSwitch('opt-end-confirm', endConfirmPref());
 }
 
 let dayVeilBusy = false;
