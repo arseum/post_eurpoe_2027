@@ -1,5 +1,6 @@
 let centerView = 'map';
 let selectedNode = null;
+let selectedBase = null;
 let openDrawer = null;
 let mapLinksCache = null;
 let lastCommand = null;
@@ -43,9 +44,12 @@ function richText(s) {
     return out.replace(/\u0000(\d+)\u0000/g, (_, i) => marks[i]);
 }
 
+function costSpans(cost) {
+    return Object.entries(cost).map(([k, v]) => `<span class="${(state.resources[k] || 0) < v ? 'short' : ''}">${resIcon(k)}${v}</span>`).join('');
+}
+
 function costHtml(cost) {
-    return '<span class="cost">' + Object.entries(cost).map(([k, v]) =>
-        `<span class="${(state.resources[k] || 0) < v ? 'short' : ''}">${resIcon(k)}${v}</span>`).join('') + '</span>';
+    return '<span class="cost">' + costSpans(cost) + '</span>';
 }
 
 function fxHtml(effects) {
@@ -110,7 +114,7 @@ function initKeys() {
         const rs = document.getElementById('research-overlay');
         if (rs.classList.contains('active')) return toggleResearch();
         if (openDrawer) return toggleDrawer(openDrawer);
-        if (selectedNode) closeNodePanel();
+        if (selectedNode || selectedBase) closeNodePanel();
     });
 }
 
@@ -167,7 +171,8 @@ function renderTop() {
 
 function setCenterView(v) {
     centerView = v;
-    if (v === 'base') openDrawer = 'dome';
+    selectedBase = null;
+    if (v === 'base' && openDrawer === 'dome') openDrawer = null;
     renderBuildPhase();
 }
 
@@ -182,8 +187,32 @@ function selectNode(id) {
     renderBuildPhase();
 }
 
+function selectBase(id) {
+    if (id && id.startsWith('slot:')) {
+        selectedBase = null;
+        openDrawer = 'dome';
+    } else selectedBase = id;
+    renderBuildPhase();
+}
+
+function hoverBase(id, ev) {
+    if (!id || !ev) {
+        gt.el.classList.remove('visible');
+        return;
+    }
+    const b = BUILDINGS.find(x => x.id === id);
+    const title = id === 'core' ? 'Cœur de PROMETHEUS' : b ? b.name : 'Emplacement libre';
+    const sub = id === 'core' ? `Niveau ${state.core} sur 3 · cliquer pour gérer` : b ? `Niveau ${getBuildingLevel(id)} sur ${BALANCE.maxBuildingLevel} · cliquer pour gérer` : 'Cliquer pour bâtir';
+    gt.el.innerHTML = ttHtml(esc(title), sub);
+    gt.el.classList.add('visible');
+    const tw = gt.el.offsetWidth, th = gt.el.offsetHeight;
+    gt.el.style.left = Math.min(ev.clientX + 16, window.innerWidth - tw - 8) + 'px';
+    gt.el.style.top = Math.min(ev.clientY + 18, window.innerHeight - th - 8) + 'px';
+}
+
 function closeNodePanel() {
     selectedNode = null;
+    selectedBase = null;
     renderBuildPhase();
 }
 
@@ -261,6 +290,9 @@ function renderBuildPhase() {
         if (window.Base3D) {
             Base3D.mount(document.getElementById('base3d-view'));
             Base3D.sync(state.buildings, state.buildingLevels, state.core, state.research.map(id => (RESEARCH.find(r => r.id === id) || {}).branch));
+            Base3D.onSelect(id => id ? selectBase(id) : (selectedBase && closeNodePanel()));
+            Base3D.onHover(hoverBase);
+            Base3D.setSelected(selectedBase);
         }
     } else {
         if (window.Base3D) Base3D.stop();
@@ -427,6 +459,7 @@ function logBody() {
 
 function renderNodePanel() {
     const el = document.getElementById('node-panel');
+    if (centerView === 'base') return renderBasePanel(el);
     const open = !!selectedNode && centerView === 'map';
     el.classList.toggle('open', open);
     if (!open) return;
@@ -494,6 +527,42 @@ function renderNodePanel() {
 
     el.style.setProperty('--st', `var(--st-${st})`);
     el.innerHTML = `<div class="np-banner"><span class="np-glyph">${ic(ICONS.node[node.type])}</span><span class="flag">${STATUS_LABEL[st]}</span><h2>${esc(node.name)}</h2><div class="eyebrow" style="color:var(--text-2)">${TYPE_LABEL[node.type]}</div><button class="dr-close" style="position:absolute;top:14px;right:14px" onclick="closeNodePanel()" aria-label="Fermer">${ic('x')}</button></div><div class="dr-body">${body}</div>`;
+}
+
+function scaledProd(prod, lvl) {
+    return Object.fromEntries(Object.entries(prod).map(([k, v]) => [k, v * lvl]));
+}
+
+function renderBasePanel(el) {
+    const isCore = selectedBase === 'core';
+    const b = isCore ? null : BUILDINGS.find(x => x.id === selectedBase);
+    const open = isCore || (!!b && isBuilt(b.id));
+    el.classList.toggle('open', open);
+    if (!open) {
+        selectedBase = null;
+        return;
+    }
+    const lvl = isCore ? state.core : getBuildingLevel(b.id);
+    const max = isCore ? 3 : BALANCE.maxBuildingLevel;
+    const cost = isCore ? getCoreUpgradeCost() : getUpgradeCost(b.id);
+    const pips = `<span class="lvl">${Array.from({length: max}, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('')}</span>`;
+    let body = `<p class="np-desc">${isCore ? `Le cœur d'Alpha-7, siège de PROMETHEUS. Chaque éveil ajoute ${BALANCE.armyCapPerCore} places à l'armée et ouvre un palier de recherche.` : richText(b.desc)}</p><div class="np-facts">`;
+    body += `<div class="fact">${ic('stack')}<span class="fact-l">Niveau ${lvl} sur ${max}</span>${pips}</div>`;
+    if (b && b.prod && Object.keys(b.prod).length) {
+        body += `<div class="fact">${ic('coins')}<span class="fact-l">Produit chaque tour</span>${fxHtml(scaledProd(b.prod, lvl))}</div>`;
+        if (cost) body += `<div class="fact">${ic('trend-up')}<span class="fact-l">Au niveau ${lvl + 1}</span>${fxHtml(scaledProd(b.prod, lvl + 1))}</div>`;
+    }
+    if (isCore && cost) body += `<div class="fact">${ic('trend-up')}<span class="fact-l">Au niveau ${lvl + 1}</span><span class="force">+${BALANCE.armyCapPerCore} armée max · palier ${roman(lvl + 1)}</span></div>`;
+    body += '</div><div class="np-actions">';
+    if (cost) {
+        const reason = blockReason(cost, true);
+        body += `<button class="btn btn-primary" ${reason ? 'disabled' : ''} data-tt="${esc(reason)}" onclick="${isCore ? 'upgradeCore()' : `upgradeBuilding('${b.id}')`}"><span class="lbl">${ic('arrow-up')}${isCore ? 'Éveiller' : 'Améliorer'}</span><span class="cost">${costSpans(cost)}${cmdChip()}</span></button>`;
+    } else {
+        body += `<div class="fact">${ic('seal-check')}<span class="fact-l">Niveau maximum atteint</span></div>`;
+    }
+    body += '</div>';
+    el.style.setProperty('--st', 'var(--st-player)');
+    el.innerHTML = `<div class="np-banner"><span class="np-glyph">${ic(isCore ? 'cpu' : ICONS.building[b.id] || 'cube')}</span><span class="flag">Alpha-7</span><h2>${esc(isCore ? 'Cœur de PROMETHEUS' : b.name)}</h2><div class="eyebrow" style="color:var(--text-2)">${isCore ? 'Cœur du dôme' : 'Bâtiment · ' + chapterTitle(CHAPTERS[b.chapter - 1])}</div><button class="dr-close" style="position:absolute;top:14px;right:14px" onclick="closeNodePanel()" aria-label="Fermer">${ic('x')}</button></div><div class="dr-body">${body}</div>`;
 }
 
 const RETREAT_OPTIONS = [[0, 'Jusqu\'au bout', 'Le combat continue jusqu\'au dernier soldat'], [0.35, 'Prudent', 'Repli quand l\'armée perd 65 % de ses PV'], [0.6, 'Très prudent', 'Repli dès 40 % de PV perdus']];

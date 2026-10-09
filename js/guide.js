@@ -37,14 +37,14 @@ const GUIDE_STEPS = [
         target: () => gq('#cmd'), ack: true
     },
     {
-        text: 'Commençons par le dôme. Ouvrez le panneau <b>Dôme</b>.',
-        target: () => railBtn('dome'), done: () => openDrawer === 'dome'
+        text: 'Commençons par le dôme. Entrez dans <b>Alpha-7</b>.',
+        target: () => gq('#vs-base'), done: () => centerView === 'base'
     },
     {
-        text: 'Un bâtiment produit à chaque tour. Le <b>Réacteur à Fusion</b> sécurise notre énergie : bâtissez-le.',
+        text: 'Un bâtiment produit à chaque tour. Cliquez sur un <b>emplacement libre</b> (anneau doré au sol), puis bâtissez le <b>Réacteur à Fusion</b> : il sécurise notre énergie.',
         target: () => openDrawer === 'dome'
             ? [...document.querySelectorAll('#drawer .row .btn-primary')].find(b => !b.disabled && b.textContent.includes('Bâtir')) || gq('#drawer .row')
-            : railBtn('dome'),
+            : centerView === 'base' ? null : gq('#vs-base'),
         done: s => s.buildings.length >= 1
     },
     {

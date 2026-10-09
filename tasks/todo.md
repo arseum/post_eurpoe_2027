@@ -139,3 +139,12 @@ Experts 88/90/90 %, moyen 44 %, les 6 fins obtenues sur 50 parties, victoire typ
 - [x] Captures avant/après, prototype validé par l'utilisateur
 - [x] Étape 2 : 7 autres bâtiments en modèles du pack (lueur par ressource), tour du cœur sur mesure, anneaux de niveau harmonisés
 - [x] Vérifié : construction, niveaux 2-3, cœur, bascule carte/base, combat 3D, aucune erreur console
+
+## Base 3D interactive (2026-10-09)
+
+- [x] Zones cliquables par emplacement et sur le cœur, clic distingué du glisser (5 px)
+- [x] Survol : anneau doré + nom et niveau près du curseur ; sélection : anneau teal qui tourne
+- [x] Panneau latéral bâtiment / cœur : niveau, production actuelle et suivante, bouton Améliorer / Éveiller
+- [x] Emplacement vide : ouvre le tiroir de construction ; Échap et ✕ ferment le panneau
+- [x] Tests Chrome : survol, clic, amélioration, cœur, vide, glisser, Échap ; non-régression carte et combats
+- [x] Entrer dans la base n'ouvre plus le tiroir Dôme (écran allégé) ; guide adapté : « Entrez dans Alpha-7 » puis « cliquez sur un emplacement libre » — testé de bout en bout

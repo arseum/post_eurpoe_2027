@@ -28,6 +28,16 @@ let hqRing3 = null;
 let slots = [];
 let built = new Map();
 let satellites = [];
+const raycaster = new THREE.Raycaster();
+const hitTargets = new Map();
+let selectCb = null;
+let hoverCb = null;
+let hoverId = null;
+let selectedId = null;
+let pointerEv = null;
+let pointerDown = null;
+let hoverRing = null;
+let selRing = null;
 
 const KIT_PALETTE = {
     metal: { color: 0x8c99ab, roughness: 0.42, metalness: 0.65 },
@@ -246,6 +256,85 @@ function buildScene() {
 
     buildHq();
     buildSlots();
+    const coreHit = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 4.6, 12), new THREE.MeshBasicMaterial({ visible: false }));
+    coreHit.position.y = 2.3;
+    scene.add(coreHit);
+    hitTargets.set(coreHit, () => 'core');
+    hoverRing = markerRing(0xc8aa6e, 0.75);
+    selRing = markerRing(0x0ac8b9, 0.95);
+}
+
+function markerRing(color, opacity) {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.045, 8, 72), new THREE.MeshBasicMaterial({ color, transparent: true, opacity, depthWrite: false }));
+    ring.rotation.x = Math.PI / 2;
+    ring.visible = false;
+    scene.add(ring);
+    return ring;
+}
+
+function placeRing(ring, id, grow) {
+    if (!id) {
+        ring.visible = false;
+        return;
+    }
+    let x = 0, z = 0, rad = 2.5;
+    if (id !== 'core') {
+        const slot = id.startsWith('slot:') ? slots[+id.slice(5)] : (built.get(id) || {}).slot;
+        if (!slot) {
+            ring.visible = false;
+            return;
+        }
+        x = slot.x;
+        z = slot.z;
+        rad = id.startsWith('slot:') ? 1.2 : 1.5 + (built.get(id).level - 1) * 0.2;
+    }
+    ring.position.set(x, 0.2, z);
+    ring.scale.setScalar(rad + grow);
+    ring.visible = true;
+}
+
+function pickAt(ev) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObjects([...hitTargets.keys()], false);
+    return hits.length ? hitTargets.get(hits[0].object)() : null;
+}
+
+function setHover(id, ev) {
+    if (id !== hoverId) {
+        hoverId = id;
+        placeRing(hoverRing, id === selectedId ? null : id, 0.08);
+        renderer.domElement.style.cursor = id ? 'pointer' : '';
+    }
+    if (hoverCb) hoverCb(id, ev);
+}
+
+function onPointerDown(ev) {
+    pointerDown = { x: ev.clientX, y: ev.clientY };
+}
+
+function onPointerUp(ev) {
+    const down = pointerDown;
+    pointerDown = null;
+    if (!down || Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 5 || !selectCb) return;
+    selectCb(pickAt(ev));
+}
+
+function onPointerMove(ev) {
+    pointerEv = ev;
+}
+
+function onPointerLeave() {
+    pointerEv = null;
+    setHover(null, null);
+}
+
+function updateHover() {
+    if (!pointerEv || pointerDown) return;
+    const ev = pointerEv;
+    pointerEv = null;
+    setHover(pickAt(ev), ev);
 }
 
 function hexFace(k, apothem, y, w, h, mat) {
@@ -366,7 +455,12 @@ function buildSlots() {
         disk.position.set(x, 0.02, z);
         scene.add(disk);
 
-        slots.push({ x, z, disk, occupied: false });
+        const slot = { x, z, disk, occupied: false, buildingId: null };
+        const hit = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.35, 2.4, 12), new THREE.MeshBasicMaterial({ visible: false }));
+        hit.position.set(x, 1.2, z);
+        scene.add(hit);
+        hitTargets.set(hit, () => slot.buildingId || 'slot:' + i);
+        slots.push(slot);
     }
 }
 
@@ -510,6 +604,7 @@ function removeBuilding(id) {
         }
     });
     b.slot.occupied = false;
+    b.slot.buildingId = null;
     b.slot.disk.visible = true;
     built.delete(id);
 }
@@ -592,6 +687,8 @@ function animate() {
     const time = clock.getElapsedTime();
 
     if (controls) controls.update();
+    updateHover();
+    if (selRing.visible) selRing.rotation.z += delta * 0.6;
     if (hqTop) {
         hqTop.material.emissiveIntensity = 1.15 + Math.sin(time * 1.4) * 0.45;
     }
@@ -637,6 +734,10 @@ function mount(el) {
         composer.addPass(new OutputPass());
         renderer.domElement.style.position = 'absolute';
         renderer.domElement.style.inset = '0';
+        renderer.domElement.addEventListener('pointerdown', onPointerDown);
+        renderer.domElement.addEventListener('pointerup', onPointerUp);
+        renderer.domElement.addEventListener('pointermove', onPointerMove);
+        renderer.domElement.addEventListener('pointerleave', onPointerLeave);
         container.appendChild(renderer.domElement);
     } else if (renderer.domElement.parentElement !== container) {
         container.appendChild(renderer.domElement);
@@ -729,6 +830,7 @@ function sync(buildingIds, levels, coreLevel, researchBranches) {
         const slot = slots.find((s) => !s.occupied);
         if (!slot) return;
         slot.occupied = true;
+        slot.buildingId = id;
         slot.disk.visible = false;
 
         const b = createBuildingGroup(id, slot);
@@ -770,4 +872,19 @@ function stop() {
     }
 }
 
-window.Base3D = { mount, sync, stop };
+function onSelect(cb) {
+    selectCb = cb;
+}
+
+function onHover(cb) {
+    hoverCb = cb;
+}
+
+function setSelected(id) {
+    selectedId = id;
+    if (!scene) return;
+    placeRing(selRing, id, 0.18);
+    if (hoverId === id) placeRing(hoverRing, null, 0);
+}
+
+window.Base3D = { mount, sync, stop, onSelect, onHover, setSelected };
