@@ -173,3 +173,12 @@ Experts 88/90/90 %, moyen 44 %, les 6 fins obtenues sur 50 parties, victoire typ
 - Relecture du diff `aa843d7..HEAD` : pas de bug trouvé. Points vérifiés : pas de second cadeau à la libération (`gifted`), atout nul pour une cité perdue, milice prise en compte dans l'estimation de défense, carte « pacte rompu » prioritaire sur « atout perdu ».
 - Connu, sans correction : si Turin alliée tombe, l'armée max baisse de 1 et l'armée peut dépasser le plafond (comportement existant pour toute perte de bonus). `startTw` plante si on choisit un événement par script avant la fin du texte : impossible pour un joueur (choix masqués), donc laissé tel quel.
 - Équilibrage : voir `tasks/spec-identite-cites.md`, « Résultats étape 1 ».
+
+## Accompagnement du joueur (spec : `tasks/spec-accompagnement.md`, 2026-10-09)
+
+- [x] Spec rédigée et validée (alertes hors guide, sans récompense, bouton Aide, ordre de la spec)
+- [x] Étape 1 : infobulles différées (400 ms), glossaire `GLOSSARY` (19 termes, dont garnison adverse), `glossText` / `term`, explication des atouts (`identity.*.help`), définitions dans les infobulles stabilité / influence et les stats PV/ATK/DEF/VIT
+- [ ] Étape 2 : menaces (pré-alerte tour 3, alertes vitales hors guide, carte qui pulse, confirmation de fin de tour)
+- [ ] Étape 3 : suivi d'objectifs (Berlin, destin en vue, 2 objectifs court terme)
+- [ ] Étape 4 : nouveaux conseils hors étapes, tiroir Aide (Objectifs, Concepts, Destins)
+- [ ] Étape 5 : tests Chrome guide activé et désactivé, harnais identique, revue, documentation

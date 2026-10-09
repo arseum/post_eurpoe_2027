@@ -745,6 +745,28 @@ const HEROES = [
     }
 ];
 
+const GLOSSARY = {
+    pv: {match: 'PV', exact: true, title: 'PV · points de vie', text: "Une unité est éliminée quand ses PV tombent à 0. Un bonus de PV s'applique à toutes vos unités, armée et garnisons, en attaque comme en défense."},
+    atk: {match: 'ATK', exact: true, title: 'ATK · attaque', text: 'Dégâts de chaque coup. On en retire la DEF de la cible, avec au moins 1 dégât.'},
+    def: {match: 'DEF', exact: true, title: 'DEF · défense', text: 'Retirée de chaque coup reçu. Fortifier un territoire donne +3 DEF à ses défenseurs au prochain combat.'},
+    vit: {match: 'VIT', exact: true, title: 'VIT · vitesse', text: "Les plus rapides frappent en premier à chaque round. Une unité avec VIT 6 ou plus vise en priorité la ligne arrière ennemie."},
+    ligne: {match: 'ligne (?:avant|arrière)', title: 'Ligne avant et ligne arrière', text: "La ligne avant encaisse les coups et protège la ligne arrière. Seules les unités rapides (VIT 6 ou plus) atteignent directement la ligne arrière."},
+    garnisonAdverse: {match: 'garnison estimée|garnison à l\'arrivée', title: 'Garnison adverse', text: "Les défenseurs de ce territoire, estimés par PROMETHEUS. Votre armée doit les vaincre pour le prendre. Elle grossit si le territoire a déjà été perdu."},
+    garnison: {match: 'garnisons?', title: 'Garnison', text: "Unités laissées sur un territoire pour le défendre quand l'armée est ailleurs. Un territoire attaqué sans garnison ni armée tombe sans combat. Elles consomment de l'énergie (entretien)."},
+    armeeMax: {match: 'armée max', title: 'Armée max', text: "Nombre de places de l'armée mobile. Les unités lourdes en prennent plusieurs. Augmente avec les Quartiers, le Cœur et certaines recherches. Au-delà, les recrues vont en garnison à Alpha-7."},
+    entretien: {match: 'entretien', title: 'Entretien', text: "Chaque unité, dans l'armée ou en garnison, consomme 0,5⚡ par place et par tour. Une armée trop grosse vide l'énergie : à 0, c'est le blackout."},
+    menace: {match: 'menaces?', title: 'Menace', text: "Une force d'Hegemonia en route vers un territoire. Elle est annoncée à l'avance, avec le nombre de tours avant l'attaque : préparez la défense."},
+    preavis: {match: 'préavis', title: 'Préavis', text: "Nombre de tours entre l'annonce d'une menace et l'attaque : le temps de placer une garnison, de ramener l'armée ou de fortifier."},
+    stabilite: {match: 'stabilité', title: 'Stabilité', text: 'Le moral de la population. Sous 30 : −2 ATK. Au-dessus de 70 : +2 ATK. À 0, c\'est la révolte et la défaite. Au-delà de 40, elle redescend peu à peu.'},
+    influence: {match: 'influence', title: 'Influence', text: 'La monnaie de la diplomatie : elle sert à sceller les alliances et à recruter les agents infiltrés.'},
+    commandement: {match: 'points? de commandement', title: 'Points de commandement', text: "Chaque ordre (bâtir, améliorer, étudier, marcher, attaquer, fortifier, s'allier) en coûte 1. Ils reviennent à chaque tour et ne se cumulent pas. Recruter est gratuit."},
+    coeur: {match: 'Cœur', title: 'Cœur de PROMETHEUS', text: "La tour au centre d'Alpha-7. L'éveiller aux niveaux 2 et 3 ouvre les paliers de recherche suivants et agrandit l'armée."},
+    occupation: {match: 'occupation', title: 'Occupation', text: 'Prendre une cité libre coûte −10🏛️ et −5🌐 tout de suite, puis −1🏛️ par tour tant que vous la tenez.'},
+    repli: {match: 'repli', title: 'Repli', text: "Pendant un assaut, si l'armée passe sous le seuil de PV choisi, elle se replie au lieu de périr. Le seuil se règle dans « Préparer l'assaut »."},
+    milice: {match: 'milices?', title: 'Milice', text: 'Combattants fournis par une cité alliée. Ils se battent à vos côtés le temps du combat, puis repartent.'},
+    fortifier: {match: 'fortifiée?s?|fortifier', title: 'Fortifier', text: 'Coûte 1 point de commandement : +3 DEF pour les défenseurs du territoire au prochain combat qui s\'y déroule.'}
+};
+
 const MAP_NODES = [
     {
         id: 'alpha7', name: 'Alpha-7', icon: '◆', type: 'home', tier: 0,
@@ -759,8 +781,8 @@ const MAP_NODES = [
         garrisonBudget: 14, allyCost: 15, unlocksChapter: 2,
         identity: {
             title: 'La Bourse du Rhône', emblem: 'scales',
-            conquest: {name: "Le Réseau d'écoute", desc: 'préavis des menaces +1 tour', prod: {data: 5, influence: 1}, effect: {threatWarning: 1}},
-            alliance: {name: 'La Ligue marchande', desc: 'autres alliances −4🌐', prod: {data: 4, influence: 1}, effect: {allyDiscount: 4}}
+            conquest: {name: "Le Réseau d'écoute", desc: 'préavis des menaces +1 tour', help: "Les transmissions d'Hegemonia sont captées : chaque menace est annoncée un tour plus tôt. Plus de temps pour placer une garnison ou ramener l'armée.", prod: {data: 5, influence: 1}, effect: {threatWarning: 1}},
+            alliance: {name: 'La Ligue marchande', desc: 'autres alliances −4🌐', help: 'Lyon intercède pour vous : les alliances avec Marseille et Turin coûtent 4🌐 de moins.', prod: {data: 4, influence: 1}, effect: {allyDiscount: 4}}
         },
         desc: 'Cité-État marchande, ses réseaux de données irriguent le Rhône. Alliable ou prenable.'
     },
@@ -770,8 +792,8 @@ const MAP_NODES = [
         garrisonBudget: 16, allyCost: 20, unlocksChapter: 2,
         identity: {
             title: 'Le Port-Forge', emblem: 'anchor',
-            conquest: {name: "L'Arsenal phocéen", desc: 'unités −1🔩', prod: {materials: 5, energy: 2}, effect: {unitDiscount: 1}},
-            alliance: {name: 'La Flotte de secours', desc: 'une milice marseillaise défend Alpha-7 attaquée', prod: {materials: 3, energy: 2}, effect: {homeRelief: 1}}
+            conquest: {name: "L'Arsenal phocéen", desc: 'unités −1🔩', help: 'Les fonderies du port travaillent pour vous : recruter une unité coûte 1🔩 de moins (minimum 1).', prod: {materials: 5, energy: 2}, effect: {unitDiscount: 1}},
+            alliance: {name: 'La Flotte de secours', desc: 'une milice marseillaise défend Alpha-7 attaquée', help: "Quand Alpha-7 est attaquée, des miliciens marseillais combattent à vos côtés. Ils sont plus nombreux à mesure que la partie avance, et repartent après le combat.", prod: {materials: 3, energy: 2}, effect: {homeRelief: 1}}
         },
         desc: 'Port fortifié, fonderies et panneaux solaires. Fière, elle se défend durement.'
     },
@@ -800,8 +822,8 @@ const MAP_NODES = [
         garrisonBudget: 15, allyCost: 18,
         identity: {
             title: 'La Cité-forge', emblem: 'anvil',
-            conquest: {name: 'Les Forges alpines', desc: '+4 PV pour toutes les unités', prod: {materials: 4, energy: 3}, effect: {hpBonus: 4}},
-            alliance: {name: 'Le Contingent alpin', desc: '+1 armée max et 2 Sentinelles offertes', prod: {materials: 2, energy: 3}, effect: {armyCap: 1, gift: ['sentinelle', 'sentinelle']}}
+            conquest: {name: 'Les Forges alpines', desc: '+4 PV pour toutes les unités', help: "Les blindages forgés à Turin équipent toutes vos unités, armée et garnisons, en attaque comme en défense : +4 PV chacune. Les héros n'en profitent pas.", prod: {materials: 4, energy: 3}, effect: {hpBonus: 4}},
+            alliance: {name: 'Le Contingent alpin', desc: '+1 armée max et 2 Sentinelles offertes', help: "À la signature, 2 Sentinelles rejoignent l'armée, ou la garnison d'Alpha-7 si l'armée est absente ou pleine. L'armée gagne ensuite une place de plus.", prod: {materials: 2, energy: 3}, effect: {armyCap: 1, gift: ['sentinelle', 'sentinelle']}}
         },
         desc: 'Cité-forge des Alpes, ses hauts-fourneaux crachent l\'acier jour et nuit. Fière de son indépendance — à rallier ou à soumettre.'
     },

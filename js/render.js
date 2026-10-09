@@ -44,6 +44,33 @@ function richText(s) {
     return out.replace(/\u0000(\d+)\u0000/g, (_, i) => marks[i]);
 }
 
+const GLOSS_RE = Object.entries(GLOSSARY).map(([k, g]) => [k, new RegExp('(?<![\\p{L}])(' + g.match + ')(?![\\p{L}])', g.exact ? 'u' : 'iu')]);
+
+function termTt(k) {
+    return tt(esc(GLOSSARY[k].title), richText(GLOSSARY[k].text));
+}
+
+function term(k, label) {
+    return `<dfn class="term" data-tt="${termTt(k)}">${label}</dfn>`;
+}
+
+function glossText(html) {
+    const used = new Set(), marks = [];
+    const out = html.split(/(<[^>]+>)/).map(part => {
+        if (part.startsWith('<')) return part;
+        for (const [k, re] of GLOSS_RE) {
+            if (used.has(k)) continue;
+            part = part.replace(re, m => {
+                used.add(k);
+                marks.push(`<dfn class="term" data-tt="${termTt(k)}">${m}</dfn>`);
+                return '\u0001' + (marks.length - 1) + '\u0001';
+            });
+        }
+        return part;
+    }).join('');
+    return out.replace(/\u0001(\d+)\u0001/g, (_, i) => marks[i]);
+}
+
 function costSpans(cost) {
     return Object.entries(cost).map(([k, v]) => `<span class="${(state.resources[k] || 0) < v ? 'short' : ''}">${resIcon(k)}${v}</span>`).join('');
 }
@@ -77,23 +104,34 @@ function render() {
     } else renderBuildPhase();
 }
 
-const gt = {el: null};
+const gt = {el: null, timer: null, target: null};
+const TT_DELAY = 400;
+
+function hideTooltip() {
+    clearTimeout(gt.timer);
+    gt.target = null;
+    gt.el.classList.remove('visible');
+}
 
 function initTooltip() {
     gt.el = document.getElementById('g-tooltip');
     document.addEventListener('mouseover', e => {
         const wrap = e.target.closest('[data-tt]');
-        if (!wrap || !wrap.dataset.tt) {
-            gt.el.classList.remove('visible');
-            return;
-        }
-        gt.el.innerHTML = wrap.dataset.tt;
-        gt.el.classList.add('visible');
-        positionTooltip(wrap);
+        if (wrap === gt.target) return;
+        hideTooltip();
+        if (!wrap || !wrap.dataset.tt) return;
+        gt.target = wrap;
+        gt.timer = setTimeout(() => {
+            if (gt.target !== wrap || !wrap.isConnected) return;
+            gt.el.innerHTML = wrap.dataset.tt;
+            gt.el.classList.add('visible');
+            positionTooltip(wrap);
+        }, TT_DELAY);
     });
     document.addEventListener('mouseout', e => {
-        if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('[data-tt]')) gt.el.classList.remove('visible');
+        if (!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest('[data-tt]')) hideTooltip();
     });
+    document.addEventListener('mousedown', hideTooltip);
 }
 
 function positionTooltip(el) {
@@ -136,7 +174,7 @@ function unitTtData(u) {
 }
 
 function statsHtmlUnit(u) {
-    return `<span class="stats"><span>PV<b>${u.hp}</b></span><span>ATK<b>${u.atk}</b></span><span>DEF<b>${u.def}</b></span><span>VIT<b>${u.spd}</b></span></span>`;
+    return `<span class="stats"><span data-tt="${termTt('pv')}">PV<b>${u.hp}</b></span><span data-tt="${termTt('atk')}">ATK<b>${u.atk}</b></span><span data-tt="${termTt('def')}">DEF<b>${u.def}</b></span><span data-tt="${termTt('vit')}">VIT<b>${u.spd}</b></span></span>`;
 }
 
 function renderTop() {
@@ -150,7 +188,8 @@ function renderTop() {
         if (lastResources && lastResources[k] !== v) bumped.push(k);
         const upkeep = k === 'energy' ? getUpkeep() : 0;
         const cities = MAP_NODES.map(n => [n, cityDividend(n)]).filter(([, d]) => d && d.prod[k]).map(([n, d]) => `<br>Dont ${esc(n.name)}, ${esc(d.name)} <span>+${d.prod[k]}</span>`).join('');
-        const body = `Réserve <span>${v} / ${meta.max}</span><br>Par tour <span>${p >= 0 ? '+' : ''}${p}</span>` + cities + (upkeep ? `<br>Dont entretien des unités <span>−${upkeep}</span>` : '') + (critical ? '<br><span style="color:var(--danger)">Stabilité critique : risque de révolte</span>' : '');
+        const g = GLOSSARY[{stability: 'stabilite', influence: 'influence'}[k]];
+        const body = (g ? `<div class="tt-def">${richText(g.text)}</div>` : '') + `Réserve <span>${v} / ${meta.max}</span><br>Par tour <span>${p >= 0 ? '+' : ''}${p}</span>` + cities + (upkeep ? `<br>Dont entretien des unités <span>−${upkeep}</span>` : '') + (critical ? '<br><span style="color:var(--danger)">Stabilité critique : risque de révolte</span>' : '');
         html += `<div class="res${critical ? ' critical' : ''}${bumped.includes(k) ? ' bump' : ''}" data-tt="${tt(meta.label, body)}">${resIcon(k)}<span class="res-val">${v}</span><span class="res-prod${p < 0 ? ' neg' : ''}">${p >= 0 ? '+' : ''}${p}</span></div>`;
     }
     lastResources = {...state.resources};
@@ -489,12 +528,12 @@ function renderNodePanel() {
     }
     if (!owned && !allied && !(node.identity && m.owner[id] === 'neutral')) {
         const pv = getForcePreview(garrisonBudgetFor(node), garrisonSeed(id));
-        body += `<div class="fact">${ic('shield-warning')}<span class="fact-l">Garnison estimée</span>${forceHtml(pv)}</div>`;
+        body += `<div class="fact">${ic('shield-warning')}<span class="fact-l">${glossText('Garnison estimée')}</span>${forceHtml(pv)}</div>`;
         if (m.fallenAllies[id]) body += `<div class="fact">${ic('handshake')}<span class="fact-l">Ancienne alliée occupée : la reprendre la libère et renoue l'alliance</span></div>`;
     }
     if (owned) {
         const g = m.garrisons[id] || [];
-        body += `<div class="fact">${ic('users-three')}<span class="fact-l">Garnison</span><span class="force">${g.length ? g.length + ' unité(s)' : '<span style="color:var(--danger)">aucune</span>'}</span></div>`;
+        body += `<div class="fact">${ic('users-three')}<span class="fact-l">${glossText('Garnison')}</span><span class="force">${g.length ? g.length + ' unité(s)' : '<span style="color:var(--danger)">aucune</span>'}</span></div>`;
     }
     if (node.type === 'home') {
         const decs = Object.entries(DECISIONS).filter(([f, d]) => state.flags[f] && d.desc);
@@ -519,7 +558,7 @@ function renderNodePanel() {
     if (owned && !m.fortified[id]) {
         body += action('wall', 'Fortifier', `fortifyNode('${id}')`, blockReason(null, true), '<span>+' + BALANCE.fortifyDef + ' DEF</span>');
     } else if (owned && m.fortified[id]) {
-        body += `<div class="fact">${ic('wall')}<span class="fact-l">Fortifié : +${BALANCE.fortifyDef} DEF au prochain combat</span></div>`;
+        body += `<div class="fact">${ic('wall')}<span class="fact-l">${glossText('Fortifié : +' + BALANCE.fortifyDef + ' DEF au prochain combat')}</span></div>`;
     }
     if (st === 'hostile' && canMarch) {
         body += action('sword', 'Préparer l\'assaut', `openAssault('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`);
@@ -547,8 +586,8 @@ function cityCard(kind, d, opts) {
     const label = kind === 'take' ? 'Prendre' : 'S\'allier';
     const flag = opts.active ? '<span class="cc-flag">Actif</span>' : '';
     const extra = opts.extra || '';
-    const note = opts.note ? `<div class="cc-note">${ic(opts.noteIcon || 'info')}<span>${opts.note}</span></div>` : '';
-    return `<div class="city-card ${kind}${opts.active ? ' active' : ''}${opts.dim ? ' dim' : ''}"><div class="cc-head"><span class="cc-kind">${ic(kind === 'take' ? 'sword' : 'handshake')}${label}</span><span class="cc-prod" data-tt="${tt('Chaque tour', 'Production de la cité tant que ce statut dure')}">${fxHtml(d.prod)}</span></div><div class="cc-name">${esc(d.name)}${flag}</div><div class="cc-line">${ic('seal-check')}<span class="cc-l">${richText(d.desc.charAt(0).toUpperCase() + d.desc.slice(1))}</span></div>${extra}${note}${opts.action || ''}</div>`;
+    const note = opts.note ? `<div class="cc-note">${ic(opts.noteIcon || 'info')}<span>${glossText(opts.note)}</span></div>` : '';
+    return `<div class="city-card ${kind}${opts.active ? ' active' : ''}${opts.dim ? ' dim' : ''}"><div class="cc-head"><span class="cc-kind">${ic(kind === 'take' ? 'sword' : 'handshake')}${label}</span><span class="cc-prod" data-tt="${tt('Chaque tour', 'Production de la cité tant que ce statut dure')}">${fxHtml(d.prod)}</span></div><div class="cc-name">${esc(d.name)}${flag}</div><div class="cc-line" data-tt="${tt(esc(d.name), richText(d.help))}">${ic('seal-check')}<span class="cc-l">${glossText(richText(d.desc.charAt(0).toUpperCase() + d.desc.slice(1)))}</span></div>${extra}${note}${opts.action || ''}</div>`;
 }
 
 function cityCards(node, st, actions) {
@@ -559,7 +598,7 @@ function cityCards(node, st, actions) {
     if (st === 'allied') return cityCard('ally', idt.alliance, {active: true});
     if (m.fallenAllies[node.id]) return cityCard('ally', idt.alliance, {dim: true, note: 'Reprenez-la pour rétablir ce pacte.', noteIcon: 'arrow-counter-clockwise'});
     if (m.lost[node.id]) return cityCard('take', idt.conquest, {dim: true, note: 'Reprenez-la pour rétablir cet atout.', noteIcon: 'arrow-counter-clockwise'});
-    const garrison = `<div class="cc-line">${ic('shield-warning')}<span class="cc-l">Garnison</span>${forceHtml(getForcePreview(garrisonBudgetFor(node), garrisonSeed(node.id)))}</div>`;
+    const garrison = `<div class="cc-line">${ic('shield-warning')}<span class="cc-l">${term('garnisonAdverse', 'Garnison')}</span>${forceHtml(getForcePreview(garrisonBudgetFor(node), garrisonSeed(node.id)))}</div>`;
     return `<div class="city-cards">${cityCard('take', idt.conquest, {extra: garrison, note: takeNote, noteIcon: 'warning', action: actions.take})}${cityCard('ally', idt.alliance, {note: allyNote, action: actions.ally})}</div>`;
 }
 
@@ -660,7 +699,7 @@ function renderAssault() {
     const seg = RETREAT_OPTIONS.map(([v, l, tt]) => `<button class="speed-btn${state.retreatAt === v ? ' active' : ''}" data-tt="${esc(tt)}" onclick="pickRetreat(${v})">${l}</button>`).join('');
     ov.innerHTML = `<div class="confirm-box assault-box plate" role="dialog" aria-labelledby="as-title"><div class="eyebrow">Préparer l'assaut · arrivée dans ${eta} tour(s)</div><h2 id="as-title">${esc(node.name)}</h2><div class="rule"></div>`
         + `<div class="odds"><div class="odd ${oddsClass(est.win)}"><b>${oddsPct(est.win)}</b><span>Victoire</span></div><div class="odd"><b>${oddsPct(est.retreat)}</b><span>Repli</span></div><div class="odd ${lose > 0.25 ? 'bad' : ''}"><b>${oddsPct(lose)}</b><span>Armée perdue</span></div></div>`
-        + `<div class="fact">${ic('shield-warning')}<span class="fact-l">Garnison à l'arrivée</span>${forceHtml(forceCounts(defenders))}</div>`
+        + `<div class="fact">${ic('shield-warning')}<span class="fact-l">${glossText('Garnison à l\'arrivée')}</span>${forceHtml(forceCounts(defenders))}</div>`
         + `<div class="sec-label">Unités engagées<span class="count">${engaged.length} / ${state.army.length}</span></div>${canLeave ? '' : `<div class="np-hint">${ic('info')}Hors d'un territoire à vous, toute l'armée marche.</div>`}<div class="assault-units">${rows}</div>`
         + (heroes ? `<div class="fact">${ic('star-four')}<span class="fact-l">Héros présents</span>${heroes}</div>` : '')
         + `<div class="sec-label">Consigne de repli</div><div class="seg">${seg}</div>`

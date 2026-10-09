@@ -216,7 +216,7 @@ function guideUpdate() {
         const actions = (isStep && !cur.item.ack)
             ? `<span class="gc-hint">${ic('hand-pointing')}À vous de jouer</span>`
             : `<button class="btn btn-primary" onclick="guideAck()">Compris</button>`;
-        card.innerHTML = `<div class="gc-portrait"><span></span></div><div class="gc-body"><div class="gc-head"><span class="eyebrow">PROMETHEUS · Conseiller</span>${count}</div><p class="gc-text">${cur.item.text}</p><div class="gc-actions">${actions}<button class="gc-skip" onclick="guideSkip()">Passer le guide</button></div></div>`;
+        card.innerHTML = `<div class="gc-portrait"><span></span></div><div class="gc-body"><div class="gc-head"><span class="eyebrow">PROMETHEUS · Conseiller</span>${count}</div><p class="gc-text">${glossText(cur.item.text)}</p><div class="gc-actions">${actions}<button class="gc-skip" onclick="guideSkip()">Passer le guide</button></div></div>`;
         card.classList.remove('show');
         void card.offsetWidth;
     }
