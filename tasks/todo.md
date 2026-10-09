@@ -165,4 +165,11 @@ Experts 88/90/90 %, moyen 44 %, les 6 fins obtenues sur 50 parties, victoire typ
   - Base : étendard par atout actif autour de la tour (teal = prise, vert = alliée, emblème doré) ; Saisie : grue animée près de l'usine, forge rougeoyante à la caserne, parabole clignotante à l'antenne (retirées si la cité est perdue)
   - Combat : « Milice marseillaise » en vert allié avec anneau au sol, ligne de journal à son arrivée
   - Vérifié : harnais identique, captures Chrome (carte, base prise/alliée, combat), 0 erreur
-- [ ] Étape 4 : tests Chrome, revue, README / ROADMAP / mémoire
+- [x] Étape 4 : tests Chrome, revue, README / ROADMAP / mémoire
+
+### Revue (2026-10-09)
+
+- Parcours de bout en bout dans Chrome : assaut réel sur Turin (Forges : +4 PV, journal), alliance Marseille (milice, carte active), rechargement de la sauvegarde (statuts et effets conservés), base 3D (étendards, forge).
+- Relecture du diff `aa843d7..HEAD` : pas de bug trouvé. Points vérifiés : pas de second cadeau à la libération (`gifted`), atout nul pour une cité perdue, milice prise en compte dans l'estimation de défense, carte « pacte rompu » prioritaire sur « atout perdu ».
+- Connu, sans correction : si Turin alliée tombe, l'armée max baisse de 1 et l'armée peut dépasser le plafond (comportement existant pour toute perte de bonus). `startTw` plante si on choisit un événement par script avant la fin du texte : impossible pour un joueur (choix masqués), donc laissé tel quel.
+- Équilibrage : voir `tasks/spec-identite-cites.md`, « Résultats étape 1 ».

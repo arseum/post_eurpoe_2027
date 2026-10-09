@@ -13,14 +13,18 @@
 - [x] Sauvegarde avec confirmation avant écrasement
 - [x] Bilan de fin détaillé (assauts, défenses, replis, pertes)
 - [x] Harnais d'équilibrage `tools/sim` (bots conquête, diplomatie, tortue, moyen)
+- [x] Niveaux de difficulté
+- [x] Vue de la base interactive en 3D (bâtiments et cœur cliquables)
+- [x] Identité des cités : Lyon, Marseille et Turin offrent un atout différent selon qu'on les prend ou qu'on s'allie (emblèmes sur la carte, étendards et accessoires dans la base, milice en combat)
 
 ## Idées futures
 
 - [ ] Son plus riche : musiques par chapitre, ambiances et effets de combat
-- [ ] Vue de la base interactive en 3D (bâtiments cliquables, construction en place)
 - [ ] Sauvegarde multiple (plusieurs emplacements) et export / import
 - [ ] Mode hors-ligne complet (PWA, manifest, service worker)
 - [ ] Davantage d'événements, dont des événements conditionnés par les bâtiments et les choix passés
 - [ ] Carte aléatoire ou variantes de carte à chaque campagne
-- [ ] Niveaux de difficulté
 - [ ] Capacités spéciales pour certaines unités et héros
+- [ ] Hegemonia qui réagit : plans annoncés sur la carte selon le style du joueur
+- [ ] Une unité unique par cité prise (ex. Bombarde de Turin) et événements propres à chaque cité selon son statut
+- [ ] Traits de cités tirés au hasard à chaque campagne
