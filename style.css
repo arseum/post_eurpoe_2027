@@ -3077,9 +3077,10 @@ body.in-battle .build-only {
 }
 
 #guide-card {
+    --gc-bottom: 84px;
     position: fixed;
     left: 50%;
-    bottom: 84px;
+    bottom: var(--gc-bottom);
     z-index: var(--z-guide);
     width: min(520px, calc(100% - 32px));
     display: flex;
@@ -3097,6 +3098,11 @@ body.in-battle .build-only {
     opacity: 1;
     pointer-events: auto;
     transform: translate(-50%, 0)
+}
+
+#guide-card.flip {
+    top: 84px;
+    bottom: auto
 }
 
 .gc-portrait {
@@ -3453,7 +3459,7 @@ dfn.term {
     }
 
     #guide-card {
-        bottom: 76px
+        --gc-bottom: 76px
     }
 
     .rail-btn {

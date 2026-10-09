@@ -204,3 +204,8 @@ Experts 88/90/90 %, moyen 44 %, les 6 fins obtenues sur 50 parties, victoire typ
 - [x] Interface : apparition progressive des ressources, Raffiner dans le panneau du Centre, Remparts dans le panneau de territoire, répit sur les cartes de menace, réserve max dans les infobulles, 5 conseils et 4 termes
 - [x] Libellé « Démo » (titre, version, écran de fin de victoire)
 - [x] Tests Chrome (apparition des ressources, remparts, raffinage, répit, badge Démo), documentation
+
+## Correctif : guide qui bloque le premier assaut (2026-10-09)
+
+- [x] La carte du guide recouvrait « Lancer l'assaut » (signalé par l'utilisateur). Correction : si la carte recouvre sa cible, elle passe en haut de l'écran (`coversTarget`, `#guide-card.flip`, variable `--gc-bottom`).
+- [x] Vérifié avec de vrais clics sur tout le tour 1, en 1440×900 et 1280×720 : chaque cible est cliquable, l'armée part sur Grenoble, 0 erreur.

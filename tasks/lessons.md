@@ -17,3 +17,5 @@
 - Sauvegarde : jamais pendant le traitement d'un tour (`endTurnBusy`) ni en combat, sinon un rechargement donne un tour à moitié appliqué (production doublée, partie bloquée en phase `battle`).
 
 - Ajouter un nœud ou une option de carte : mesurer au harnais sur 8 graines, et vérifier séparément l'effet du jeu et celui des bots. Un bot qui ignore le nœud donne la référence. Les bots réagissent mal aux nouveautés (cible rentable au mauvais moment, garde paniquée, armée bloquée dans un cul-de-sac). Leur faire jouer le coup enseigné au joueur avant de conclure sur l'équilibrage.
+
+- Tester un parcours guidé avec de **vrais clics** (`page.mouse.click` au centre de l'élément, et `document.elementFromPoint` pour vérifier qu'il n'est pas recouvert), jamais seulement en appelant les fonctions (`launchAssault()`). Le tutoriel « fonctionnait » en test, mais la carte du guide recouvrait le bouton « Lancer l'assaut » et bloquait le joueur. Règle : toute fenêtre flottante, guide compris, doit s'écarter de la cible qu'elle désigne (`coversTarget` / `.flip`).

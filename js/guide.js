@@ -447,14 +447,24 @@ function guideUpdate() {
     if (!guideRaf) guideRaf = requestAnimationFrame(guideTrack);
 }
 
+function coversTarget(card, r) {
+    const w = card.offsetWidth, h = card.offsetHeight;
+    const bottom = window.innerHeight - (parseFloat(getComputedStyle(card).getPropertyValue('--gc-bottom')) || 84);
+    const left = (window.innerWidth - w) / 2;
+    return r.right > left - 8 && r.left < left + w + 8 && r.bottom > bottom - h - 8 && r.top < bottom + 8;
+}
+
 function guideTrack() {
     guideRaf = null;
     const ring = document.getElementById('guide-ring');
+    const card = document.getElementById('guide-card');
     const el = guideTarget ? s0(guideTarget) : null;
     const r = el && el.getBoundingClientRect();
     if (!r || r.width === 0 || r.height === 0 || getComputedStyle(el).visibility === 'hidden') {
         ring.classList.remove('show');
+        card.classList.remove('flip');
     } else {
+        card.classList.toggle('flip', coversTarget(card, r));
         const pad = 6;
         const box = `${r.left - pad},${r.top - pad},${r.width + pad * 2},${r.height + pad * 2}`;
         if (ring.dataset.box !== box) {
@@ -466,7 +476,10 @@ function guideTrack() {
         ring.classList.add('show');
     }
     if (guideTarget) guideRaf = requestAnimationFrame(guideTrack);
-    else ring.classList.remove('show');
+    else {
+        ring.classList.remove('show');
+        card.classList.remove('flip');
+    }
 }
 
 function guideAck() {
