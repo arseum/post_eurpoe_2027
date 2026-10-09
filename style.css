@@ -1706,6 +1706,11 @@ button:focus-visible, [tabindex]:focus-visible {
     transform: rotate(-45deg)
 }
 
+.threat-card.danger {
+    border-color: var(--danger);
+    animation: dangerPulse 1.8s ease-in-out infinite
+}
+
 .threat-card.imminent .t-eta {
     background: rgba(200, 71, 60, .4);
     animation: alarm 1.2s ease-in-out infinite
@@ -2819,6 +2824,10 @@ body.in-battle .build-only {
     gap: 12px
 }
 
+.gc-count.vital {
+    color: var(--danger)
+}
+
 .gc-count {
     font-size: .72rem;
     letter-spacing: .12em;
@@ -2988,6 +2997,11 @@ dfn.term {
 
 @keyframes blink {
     50% { opacity: 0 }
+}
+
+@keyframes dangerPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(212, 87, 74, 0) }
+    50% { box-shadow: 0 0 0 2px rgba(212, 87, 74, .55), 0 0 22px rgba(212, 87, 74, .45) }
 }
 
 @keyframes alarm {

@@ -90,10 +90,16 @@ const GUIDE_STEPS = [
 
 const GUIDE_TIPS = [
     {
-        id: 'threat', urgent: true,
+        id: 'prealert', urgent: true, vital: true,
+        trigger: s => s.phase === 'build' && s.turn >= 3 && !s.map.threats.length && !s.guide.seen.includes('threat'),
+        target: () => nodeLabel('alpha7'),
+        text: 'Hegemonia sait que nous sommes réveillés : ses raids vont commencer. Chaque attaque est annoncée quelques tours à l\'avance. Gardez toujours des unités en <b>garnison à Alpha-7</b> : si le dôme tombe, tout est perdu.'
+    },
+    {
+        id: 'threat', urgent: true, vital: true,
         trigger: s => s.phase === 'build' && s.map.threats.length > 0,
         target: () => gq('#threats .threat-card'),
-        text: 'Une force hostile marche sur nos terres. Le chiffre indique les tours avant l\'attaque. Sans garnison ni armée sur place, la colonie tombera, et si c\'est Alpha-7, tout est perdu.'
+        text: 'Une force hostile marche sur nos terres. Le chiffre indique les tours avant l\'attaque, la carte nos chances de tenir. Placez une garnison, ramenez l\'armée ou fortifiez : sans défenseurs, la colonie tombe, et si c\'est Alpha-7, tout est perdu.'
     },
     {
         id: 'battle', urgent: true, inBattle: true,
@@ -185,6 +191,20 @@ function currentGuideItem() {
     return stepsDone ? null : {kind: 'step', item: GUIDE_STEPS[g.step]};
 }
 
+function vitalGuideItem() {
+    const g = state.guide;
+    if (g.tip) {
+        const tip = GUIDE_TIPS.find(t => t.id === g.tip);
+        if (tip && tip.vital && !(tip.expire && tip.expire(state))) return {kind: 'tip', item: tip};
+        g.tip = null;
+    }
+    const tip = GUIDE_TIPS.find(t => t.vital && !g.seen.includes(t.id) && t.trigger(state));
+    if (!tip) return null;
+    g.tip = tip.id;
+    save();
+    return {kind: 'tip', item: tip};
+}
+
 function guideVisible(cur) {
     if (gq('#event-overlay').classList.contains('active') || gq('#chapter-overlay').classList.contains('active')) return false;
     if (state.phase !== 'build' && !cur.item.inBattle) return false;
@@ -202,21 +222,21 @@ function guideUpdate() {
     }
     const railGuide = document.getElementById('btn-guide');
     if (railGuide) railGuide.classList.toggle('active', state.guide.on);
-    const cur = state.guide.on ? currentGuideItem() : null;
+    const cur = state.guide.on ? currentGuideItem() : vitalGuideItem();
     if (!cur || !guideVisible(cur)) {
         card.classList.remove('show');
         guideTarget = null;
         return;
     }
     const isStep = cur.kind === 'step';
-    const key = cur.kind + ':' + (isStep ? state.guide.step : cur.item.id);
+    const key = cur.kind + ':' + (isStep ? state.guide.step : cur.item.id) + ':' + state.guide.on;
     if (key !== guideKey) {
         guideKey = key;
-        const count = isStep ? `<span class="gc-count">${state.guide.step + 1} / ${GUIDE_STEPS.length}</span>` : '<span class="gc-count">Conseil</span>';
+        const count = isStep ? `<span class="gc-count">${state.guide.step + 1} / ${GUIDE_STEPS.length}</span>` : `<span class="gc-count${cur.item.vital ? ' vital' : ''}">${cur.item.vital ? 'Alerte' : 'Conseil'}</span>`;
         const actions = (isStep && !cur.item.ack)
             ? `<span class="gc-hint">${ic('hand-pointing')}À vous de jouer</span>`
             : `<button class="btn btn-primary" onclick="guideAck()">Compris</button>`;
-        card.innerHTML = `<div class="gc-portrait"><span></span></div><div class="gc-body"><div class="gc-head"><span class="eyebrow">PROMETHEUS · Conseiller</span>${count}</div><p class="gc-text">${glossText(cur.item.text)}</p><div class="gc-actions">${actions}<button class="gc-skip" onclick="guideSkip()">Passer le guide</button></div></div>`;
+        card.innerHTML = `<div class="gc-portrait"><span></span></div><div class="gc-body"><div class="gc-head"><span class="eyebrow">PROMETHEUS · Conseiller</span>${count}</div><p class="gc-text">${glossText(cur.item.text)}</p><div class="gc-actions">${actions}${state.guide.on ? '<button class="gc-skip" onclick="guideSkip()">Passer le guide</button>' : ''}</div></div>`;
         card.classList.remove('show');
         void card.offsetWidth;
     }

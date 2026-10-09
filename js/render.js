@@ -729,7 +729,8 @@ function renderThreats() {
         const own = state.map.owner[t.nodeId] === 'player';
         const odds = own ? defenseOdds(t) : null;
         const oddsTxt = own ? ` · <span class="odds-inline ${oddsClass(odds)}">${odds === null ? 'sans défense' : oddsPct(odds) + ' de tenir'}</span>` : '';
-        return `<button class="threat-card${t.arrivesIn <= 1 ? ' imminent' : ''}" onclick="focusThreat('${t.nodeId}')" data-tt="${esc('Voir ' + n.name + (own ? ' — chances estimées avec la garnison actuelle' : ''))}"><span class="t-eta"><span>${t.arrivesIn}</span></span><span><span class="t-name">${esc(n.name)}</span><br><span class="t-sub">${units} assaillants · ${t.arrivesIn > 1 ? 'dans ' + t.arrivesIn + ' tours' : 'au prochain tour'}${oddsTxt}</span></span></button>`;
+        const danger = own && (odds === null || odds < 0.6);
+        return `<button class="threat-card${t.arrivesIn <= 1 ? ' imminent' : ''}${danger ? ' danger' : ''}" onclick="focusThreat('${t.nodeId}')" data-tt="${esc('Voir ' + n.name + (own ? ' — chances estimées avec la garnison actuelle' : ''))}"><span class="t-eta"><span>${t.arrivesIn}</span></span><span><span class="t-name">${esc(n.name)}</span><br><span class="t-sub">${units} assaillants · ${t.arrivesIn > 1 ? 'dans ' + t.arrivesIn + ' tours' : 'au prochain tour'}${oddsTxt}</span></span></button>`;
     }).join('');
 }
 
@@ -739,10 +740,23 @@ function renderEndTurn() {
     b.innerHTML = `<span class="et-inner">${ic('sun-horizon')}<span class="et-label">Fin du tour</span><span class="et-num">${state.turn} → ${state.turn + 1}</span></span>`;
 }
 
-function requestEndTurn() {
+function fallingNext() {
+    return state.map.threats.filter(t => t.arrivesIn <= 1 && state.map.owner[t.nodeId] === 'player').map(t => ({t, odds: defenseOdds(t)})).filter(x => x.odds === null || x.odds < 0.5);
+}
+
+function requestEndTurn(skipDanger) {
     if (state.phase !== 'build' || endTurnBusy || dayVeilBusy) return;
+    const falling = skipDanger ? [] : fallingNext();
+    if (falling.length) return showDangerConfirm(falling);
     if (state.command > 0 && !state.skipEndConfirm) return showEndTurnConfirm();
     passDay();
+}
+
+function showDangerConfirm(falling) {
+    const home = falling.some(x => x.t.nodeId === 'alpha7');
+    const rows = falling.map(({t, odds}) => `<div class="fact threat">${ic('warning-diamond')}<span class="fact-l">${esc(getNode(t.nodeId).name)}</span><span class="force">${odds === null ? 'sans défense' : oddsPct(odds) + ' de tenir'}</span></div>`).join('');
+    const msg = home ? 'Si Alpha-7 tombe, la partie est perdue. Placez des unités en garnison, ramenez l\'armée ou fortifiez avant de finir le tour.' : 'Ces territoires seront attaqués au prochain tour et risquent de tomber. Une garnison, l\'armée ou une fortification peuvent encore changer l\'issue.';
+    openConfirm(`<div class="confirm-box plate danger" role="alertdialog" aria-labelledby="cf-title"><div class="eyebrow">Fin du tour ${state.turn}</div><h2 id="cf-title">${home ? 'Alpha-7 est en danger' : 'Une colonie va tomber'}</h2><div class="rule"></div><p>${glossText(msg)}</p>${rows}<div class="confirm-actions"><button class="btn btn-primary" onclick="closeConfirm()">${ic('arrow-left')}Revenir aux ordres</button><button class="btn btn-ghost" onclick="closeConfirm(); requestEndTurn(true)">${ic('sun-horizon')}Finir quand même</button></div></div>`).querySelector('.btn-primary').focus();
 }
 
 function showEndTurnConfirm() {
