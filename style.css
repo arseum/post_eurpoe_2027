@@ -1664,6 +1664,168 @@ button:focus-visible, [tabindex]:focus-visible {
     gap: 8px
 }
 
+#objectives {
+    position: absolute;
+    top: 80px;
+    left: 104px;
+    width: 272px;
+    z-index: var(--z-hud);
+    padding: 0 0 4px;
+    transition: opacity .25s, transform .35s var(--ease)
+}
+
+#objectives.hidden {
+    opacity: 0;
+    transform: translateX(-12px);
+    pointer-events: none
+}
+
+#objectives.folded {
+    width: auto;
+    padding: 0
+}
+
+#objectives.urgent {
+    border-color: var(--danger)
+}
+
+.obj-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 9px 12px;
+    color: var(--gold-1);
+    background: none;
+    border: 0;
+    cursor: pointer
+}
+
+.obj-head .eyebrow {
+    flex: 1;
+    text-align: left
+}
+
+.obj-count {
+    min-width: 18px;
+    height: 18px;
+    display: grid;
+    place-items: center;
+    font-size: .7rem;
+    font-weight: 600;
+    color: var(--ink-0);
+    background: var(--gold-1)
+}
+
+#objectives.urgent .obj-count {
+    background: var(--danger)
+}
+
+.obj-long {
+    margin: 0 12px;
+    padding: 4px 0 10px;
+    border-bottom: 1px solid var(--gold-3);
+    display: grid;
+    gap: 6px
+}
+
+.obj-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-family: var(--font-display);
+    font-size: 1.02rem;
+    color: var(--gold-hi)
+}
+
+.obj-title i {
+    color: var(--gold-1)
+}
+
+.obj-gauge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .76rem;
+    color: var(--text-2)
+}
+
+.obj-bar {
+    flex: 1;
+    height: 5px;
+    background: rgba(200, 71, 60, .18);
+    border: 1px solid rgba(200, 71, 60, .4)
+}
+
+.obj-bar i {
+    display: block;
+    height: 100%;
+    background: var(--st-hostile)
+}
+
+.obj-num {
+    font-weight: 600;
+    color: #e0a39b
+}
+
+.obj-destiny {
+    font-size: .8rem;
+    color: var(--text-2)
+}
+
+.obj-destiny b {
+    color: var(--gold-hi);
+    font-weight: 600
+}
+
+.obj-end {
+    margin-top: 5px;
+    color: var(--text-2)
+}
+
+.obj-end.ok b {
+    color: var(--teal)
+}
+
+.obj-list {
+    display: grid;
+    gap: 2px;
+    padding: 6px 6px 4px
+}
+
+.obj-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    font-size: .86rem;
+    text-align: left;
+    color: var(--text);
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background .2s, border-color .2s
+}
+
+.obj-item:hover {
+    background: rgba(200, 170, 110, .08);
+    border-color: var(--gold-3)
+}
+
+.obj-item i {
+    color: var(--gold-1);
+    font-size: 1.05rem;
+    flex: none
+}
+
+.obj-item.urgent {
+    color: #ffd9d2
+}
+
+.obj-item.urgent i {
+    color: var(--danger)
+}
+
 #threats {
     position: absolute;
     left: 104px;

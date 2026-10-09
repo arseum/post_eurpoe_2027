@@ -354,6 +354,7 @@ function renderBuildPhase() {
     renderDrawer();
     renderNodePanel();
     renderThreats();
+    renderObjectives();
     renderEndTurn();
     guideUpdate();
 }
