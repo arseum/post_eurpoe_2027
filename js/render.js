@@ -44,7 +44,7 @@ function richText(s) {
     return out.replace(/\u0000(\d+)\u0000/g, (_, i) => marks[i]);
 }
 
-const GLOSS_RE = Object.entries(GLOSSARY).map(([k, g]) => [k, new RegExp('(?<![\\p{L}])(' + g.match + ')(?![\\p{L}])', g.exact ? 'u' : 'iu')]);
+const GLOSS_RE = Object.entries(GLOSSARY).map(([k, g]) => [k, new RegExp('(^|[^\\p{L}])(' + g.match + ')(?![\\p{L}])', g.exact ? 'u' : 'iu')]);
 
 function termTt(k) {
     return tt(esc(GLOSSARY[k].title), richText(GLOSSARY[k].text));
@@ -60,10 +60,10 @@ function glossText(html) {
         if (part.startsWith('<')) return part;
         for (const [k, re] of GLOSS_RE) {
             if (used.has(k)) continue;
-            part = part.replace(re, m => {
+            part = part.replace(re, (m, pre, word) => {
                 used.add(k);
-                marks.push(`<dfn class="term" data-tt="${termTt(k)}">${m}</dfn>`);
-                return '\u0001' + (marks.length - 1) + '\u0001';
+                marks.push(`<dfn class="term" data-tt="${termTt(k)}">${word}</dfn>`);
+                return pre + '\u0001' + (marks.length - 1) + '\u0001';
             });
         }
         return part;
@@ -261,13 +261,14 @@ function selectBase(id) {
 
 function hoverBase(id, ev) {
     if (!id || !ev) {
-        gt.el.classList.remove('visible');
+        hideTooltip();
         return;
     }
     const b = BUILDINGS.find(x => x.id === id);
     const title = id === 'core' ? 'Cœur de PROMETHEUS' : b ? b.name : 'Emplacement libre';
     const sub = id === 'core' ? `Niveau ${state.core} sur 3 · cliquer pour gérer` : b ? `Niveau ${getBuildingLevel(id)} sur ${BALANCE.maxBuildingLevel} · cliquer pour gérer` : 'Cliquer pour bâtir';
-    gt.el.innerHTML = ttHtml(esc(title), sub);
+    const html = ttHtml(esc(title), sub);
+    if (gt.el.innerHTML !== html) gt.el.innerHTML = html;
     gt.el.classList.add('visible');
     const tw = gt.el.offsetWidth, th = gt.el.offsetHeight;
     gt.el.style.left = Math.min(ev.clientX + 16, window.innerWidth - tw - 8) + 'px';
@@ -577,17 +578,18 @@ function renderNodePanel() {
     const canMarch = linked && !m.armyDest;
     const noArmy = !state.army.length;
     const action = (icon, label, fn, reason, extra = '') => `<button class="btn btn-primary" ${reason ? 'disabled' : ''} data-tt="${esc(reason)}" onclick="${fn}"><span class="lbl">${ic(icon)}${label}</span><span class="cost">${extra}${cmdChip()}</span></button>`;
+    const assaultBtn = canMarch ? action('sword', 'Préparer l\'assaut', `openAssault('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`) : '';
     const neutralCity = node.type === 'city' && m.owner[id] === 'neutral' && !allied;
     if (node.identity) body += cityCards(node, st, neutralCity ? {
-        take: canMarch ? action('sword', 'Préparer l\'assaut', `openAssault('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`) : '',
+        take: assaultBtn,
         ally: allyAction(node, action)
     } : {});
     body += '<div class="np-actions">';
     if (owned) {
         const lvl = rampartLevel(id), rc = rampartCost(id);
         if (rc !== null) {
-            const short = (state.resources.materials || 0) < rc;
-            body += action('castle-turret', `Remparts niv. ${lvl + 1}`, `buildRampart('${id}')`, blockReason(null, true) || (short ? 'Matériaux insuffisants' : ''), `<span class="${short ? 'short' : ''}">${resIcon('materials')}${rc}</span>`);
+            const cost = {materials: rc};
+            body += action('castle-turret', `Remparts niv. ${lvl + 1}`, `buildRampart('${id}')`, blockReason(null, true) || (canAfford(cost) ? '' : 'Matériaux insuffisants'), costSpans(cost));
         }
     }
     if (owned && !m.fortified[id]) {
@@ -595,9 +597,7 @@ function renderNodePanel() {
     } else if (owned && m.fortified[id]) {
         body += `<div class="fact">${ic('wall')}<span class="fact-l">${glossText('Fortifié : +' + BALANCE.fortifyDef + ' DEF au prochain combat')}</span></div>`;
     }
-    if (st === 'hostile' && canMarch) {
-        body += action('sword', 'Préparer l\'assaut', `openAssault('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`);
-    }
+    if (st === 'hostile') body += assaultBtn;
     if ((owned || allied) && canMarch && m.armyAt !== id) {
         body += action('path', 'Déplacer l\'armée ici', `moveArmy('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`);
     }
@@ -611,10 +611,9 @@ function renderNodePanel() {
 }
 
 function allyAction(node, action) {
-    const cost = getAllyCost(node);
-    const short = (state.resources.influence || 0) < cost;
-    const r = blockReason(null, true) || (short ? 'Influence insuffisante' : '');
-    return action('handshake', 'Proposer une alliance', `allyCity('${node.id}')`, r, `<span class="${short ? 'short' : ''}">${resIcon('influence')}${cost}</span>`);
+    const cost = {influence: getAllyCost(node)};
+    const r = blockReason(null, true) || (canAfford(cost) ? '' : 'Influence insuffisante');
+    return action('handshake', 'Proposer une alliance', `allyCity('${node.id}')`, r, costSpans(cost));
 }
 
 function cityCard(kind, d, opts) {
@@ -788,9 +787,9 @@ function fallingNext() {
     return state.map.threats.filter(t => t.arrivesIn <= 1 && state.map.owner[t.nodeId] === 'player').map(t => ({t, odds: defenseOdds(t)})).filter(x => x.odds === null || x.odds < 0.5);
 }
 
-function requestEndTurn(skipDanger) {
+function requestEndTurn() {
     if (state.phase !== 'build' || endTurnBusy || dayVeilBusy) return;
-    const falling = skipDanger ? [] : fallingNext();
+    const falling = fallingNext();
     if (falling.length) return showDangerConfirm(falling);
     if (state.command > 0 && !state.skipEndConfirm) return showEndTurnConfirm();
     passDay();
@@ -800,7 +799,7 @@ function showDangerConfirm(falling) {
     const home = falling.some(x => x.t.nodeId === 'alpha7');
     const rows = falling.map(({t, odds}) => `<div class="fact threat">${ic('warning-diamond')}<span class="fact-l">${esc(getNode(t.nodeId).name)}</span><span class="force">${odds === null ? 'sans défense' : oddsPct(odds) + ' de tenir'}</span></div>`).join('');
     const msg = home ? 'Si Alpha-7 tombe, la partie est perdue. Placez des unités en garnison, ramenez l\'armée ou fortifiez avant de finir le tour.' : 'Ces territoires seront attaqués au prochain tour et risquent de tomber. Une garnison, l\'armée ou une fortification peuvent encore changer l\'issue.';
-    openConfirm(`<div class="confirm-box plate danger" role="alertdialog" aria-labelledby="cf-title"><div class="eyebrow">Fin du tour ${state.turn}</div><h2 id="cf-title">${home ? 'Alpha-7 est en danger' : 'Une colonie va tomber'}</h2><div class="rule"></div><p>${glossText(msg)}</p>${rows}<div class="confirm-actions"><button class="btn btn-primary" onclick="closeConfirm()">${ic('arrow-left')}Revenir aux ordres</button><button class="btn btn-ghost" onclick="closeConfirm(); requestEndTurn(true)">${ic('sun-horizon')}Finir quand même</button></div></div>`).querySelector('.btn-primary').focus();
+    openConfirm(`<div class="confirm-box plate danger" role="alertdialog" aria-labelledby="cf-title"><div class="eyebrow">Fin du tour ${state.turn}</div><h2 id="cf-title">${home ? 'Alpha-7 est en danger' : 'Une colonie va tomber'}</h2><div class="rule"></div><p>${glossText(msg)}</p>${rows}<div class="confirm-actions"><button class="btn btn-primary" onclick="closeConfirm()">${ic('arrow-left')}Revenir aux ordres</button><button class="btn btn-ghost" onclick="closeConfirm(); passDay()">${ic('sun-horizon')}Finir quand même</button></div></div>`).querySelector('.btn-primary').focus();
 }
 
 function showEndTurnConfirm() {
@@ -842,7 +841,7 @@ let dayVeilBusy = false;
 
 function passDay() {
     if (state.phase !== 'build' || endTurnBusy || dayVeilBusy) return;
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return endTurn();
+    if (reducedMotion()) return endTurn();
     dayVeilBusy = true;
     const veil = document.getElementById('day-veil');
     veil.innerHTML = `<div class="dv-inner"><div class="dv-sun">${ic('sun-horizon')}</div><div class="eyebrow">Une nuit passe sur l'Europe</div><div class="dv-turns"><span class="dv-old">${state.turn}</span><span class="dv-new">${state.turn + 1}</span></div><div class="dv-label">Tour</div><div class="rule"></div></div>`;

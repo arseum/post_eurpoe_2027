@@ -21,7 +21,7 @@ function armyCount(s) {
 
 const PROMETHEUS_FACE = '<svg class="pm-face" viewBox="0 0 72 72" aria-hidden="true"><defs><radialGradient id="pmIris" cx="50%" cy="45%" r="55%"><stop offset="0" stop-color="#e9fffb"/><stop offset=".35" stop-color="#3ff5e6"/><stop offset="1" stop-color="#0a5d58"/></radialGradient><radialGradient id="pmBg" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#0d2a36"/><stop offset="1" stop-color="#04080f"/></radialGradient><clipPath id="pmClip"><circle cx="36" cy="36" r="27"/></clipPath></defs><polygon class="pm-hex" points="36,2 65,19 65,53 36,70 7,53 7,19"/><circle cx="36" cy="36" r="27" fill="url(#pmBg)"/><g clip-path="url(#pmClip)"><rect class="pm-scan" x="9" y="0" width="54" height="3"/></g><circle class="pm-ring pm-r1" cx="36" cy="36" r="24"/><circle class="pm-ring pm-r2" cx="36" cy="36" r="18.5"/><g class="pm-eye"><circle cx="36" cy="36" r="10" fill="url(#pmIris)"/><circle cx="36" cy="36" r="4.2" fill="#04080f"/><circle cx="34.4" cy="34.2" r="1.3" fill="#f0e6d2"/></g></svg>';
 const TYPE_MS = 18;
-const gtw = {timer: null, done: true, nodes: []};
+const gtw = {timer: null, nodes: []};
 
 function reducedMotion() {
     return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -37,7 +37,6 @@ function finishGuideType() {
     gtw.timer = null;
     gtw.nodes.forEach(n => n.node.textContent = n.text);
     gtw.nodes = [];
-    gtw.done = true;
     setSpeaking(false);
 }
 
@@ -49,7 +48,6 @@ function guideType(el) {
     if (reducedMotion() || !nodes.length) return;
     nodes.forEach(n => n.node.textContent = '');
     gtw.nodes = nodes;
-    gtw.done = false;
     setSpeaking(true);
     let i = 0, pos = 0;
     gtw.timer = setInterval(() => {
@@ -66,7 +64,7 @@ function guideType(el) {
 
 function guideCardClick(e) {
     if (e.target.closest('.gc-skip')) return;
-    if (!gtw.done) {
+    if (gtw.timer) {
         e.stopPropagation();
         e.preventDefault();
         finishGuideType();
@@ -87,7 +85,7 @@ function onGuideKeydown(e) {
     if (document.activeElement && document.activeElement !== document.body) return;
     if (document.querySelector('#confirm-overlay.active, #event-overlay.active')) return;
     e.preventDefault();
-    if (!gtw.done) return finishGuideType();
+    if (gtw.timer) return finishGuideType();
     if (card.querySelector('.gc-actions .btn-primary')) guideAck();
 }
 
@@ -303,7 +301,7 @@ const GUIDE_TIPS = [
     {
         id: 'lowStability', urgent: true,
         trigger: s => s.phase === 'build' && s.resources.stability < BALANCE.stabilityLow,
-        target: () => gq('#res-plates .res:nth-child(4)'),
+        target: () => gq('#res-plates .res.stability'),
         text: 'La population gronde : sous 30 de <b>stabilité</b>, nos unités perdent 2 ATK, et à 0 c\'est la révolte. Quartiers, Bouclier du Dôme et certains choix d\'événements la remontent.'
     },
     {
@@ -422,7 +420,7 @@ function guideUpdate() {
     if (!cur || !guideVisible(cur)) {
         card.classList.remove('show');
         guideTarget = null;
-        if (!gtw.done) {
+        if (gtw.timer) {
             finishGuideType();
             guideKey = null;
         }

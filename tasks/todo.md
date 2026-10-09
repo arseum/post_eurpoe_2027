@@ -209,3 +209,10 @@ Experts 88/90/90 %, moyen 44 %, les 6 fins obtenues sur 50 parties, victoire typ
 
 - [x] La carte du guide recouvrait « Lancer l'assaut » (signalé par l'utilisateur). Correction : si la carte recouvre sa cible, elle passe en haut de l'écran (`coversTarget`, `#guide-card.flip`, variable `--gc-bottom`).
 - [x] Vérifié avec de vrais clics sur tout le tour 1, en 1440×900 et 1280×720 : chaque cible est cliquable, l'armée part sur Grenoble, 0 erreur.
+
+## Revue des commits du 2026-10-09 (simplify + code review)
+
+- [x] Simplify : `disposeTree` réutilisé, `slot.occupied` et `bloomPass` retirés, `Vector2` de picking réutilisé, infobulle 3D réécrite seulement si son contenu change (via `hideTooltip`), bouton d'assaut construit une fois, `costSpans`/`canAfford` réutilisés (remparts, alliance, raffiner, répit), `reducedMotion()`, `gtw.done` déduit de `gtw.timer`, `cityIds()` dans le harnais
+- [x] Code review : regex du glossaire sans lookbehind (Safari < 16.4), « Finir quand même » ne redemande plus pour les points inutilisés, clé de cache des objectifs étendue (recherches, alliances, stabilité), conseil de stabilité ciblé par `.res.stability`, milice marseillaise exclue des unités perdues
+- [x] Vérifié : harnais identique (hors `elapsedMs`), test Chrome (survol 3D, glossaire, confirmation de danger, panneau de cité), 0 erreur JS
+- [ ] Non traité (choix de design ou chantier plus large) : plafonds `resMax` appliqués aux vieilles sauvegardes, `guide.step` non migré pour les sauvegardes 1.2.0 en plein tutoriel, milice sans bonus DEF, textes du tutoriel fixes selon la difficulté, éligibilité du répit hors `canTruce`, dévoilement des ressources déclenché par le rendu, libération de géométries GLB partagées dans `disposeTree`, ombres recalculées à chaque image

@@ -573,7 +573,7 @@ function simulateBattle(playerUnits, enemyUnits, opts = {}) {
         retreated,
         survivors: playerUnits.filter(u => u.hp > 0 && !u.hero).map(u => u.id),
         heroesDown: playerUnits.filter(u => u.hero && u.hp <= 0).map(u => u.id),
-        finalUnits: playerUnits.map(u => ({uid: u.uid, id: u.id, hp: u.hp, hero: !!u.hero})),
+        finalUnits: playerUnits.map(u => ({uid: u.uid, id: u.id, hp: u.hp, hero: !!u.hero, relief: !!u.relief})),
         initial
     };
 }
@@ -882,7 +882,7 @@ function sealAlliance(id, msg) {
 }
 
 function canRefine() {
-    return state.phase === 'build' && isBuilt('centreDonnees') && state.refineTurn !== state.turn && state.command > 0 && (state.resources.materials || 0) >= BALANCE.refineCost;
+    return state.phase === 'build' && isBuilt('centreDonnees') && state.refineTurn !== state.turn && state.command > 0 && canAfford({materials: BALANCE.refineCost});
 }
 
 function refineGain() {
@@ -912,7 +912,7 @@ function rampartCost(id) {
 
 function canRampart(id) {
     const cost = rampartCost(id);
-    return state.phase === 'build' && state.map.owner[id] === 'player' && cost !== null && state.command > 0 && (state.resources.materials || 0) >= cost;
+    return state.phase === 'build' && state.map.owner[id] === 'player' && cost !== null && state.command > 0 && canAfford({materials: cost});
 }
 
 function buildRampart(id) {
@@ -928,7 +928,7 @@ function buildRampart(id) {
 }
 
 function canTruce(th) {
-    return !!th && !th.delayed && (state.resources.influence || 0) >= BALANCE.truceCost;
+    return !!th && !th.delayed && canAfford({influence: BALANCE.truceCost});
 }
 
 function negotiateTruce(i) {
@@ -1057,7 +1057,7 @@ function reliefUnits() {
 }
 
 function tallyCombat(sim, key) {
-    state.stats.unitsLost += sim.finalUnits.filter(u => !u.hero && u.hp <= 0).length;
+    state.stats.unitsLost += sim.finalUnits.filter(u => !u.hero && !u.relief && u.hp <= 0).length;
     state.stats[key]++;
 }
 

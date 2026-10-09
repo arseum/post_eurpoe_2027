@@ -82,7 +82,7 @@ async function playGame(bot, seed, maxTurns, aim, difficulty) {
         if (s.command > 0) rec.unusedCmd++;
         rec.maxArmy = Math.max(rec.maxArmy, game.G.getArmySize());
         if (rec.firstAlliance === null && Object.keys(s.map.allied).length) rec.firstAlliance = s.turn;
-        for (const id of ['lyon', 'marseille', 'turin']) if (!rec.cities[id]) rec.cities[id] = s.map.owner[id] === 'player' ? 'take' : s.map.allied[id] ? 'ally' : null;
+        for (const id of game.G.cityIds()) if (!rec.cities[id]) rec.cities[id] = s.map.owner[id] === 'player' ? 'take' : s.map.allied[id] ? 'ally' : null;
         if (rec.firstConquest === null && Object.entries(s.map.owner).some(([k, v]) => k !== 'alpha7' && v === 'player')) rec.firstConquest = s.turn;
         try {
             await game.G.endTurn();

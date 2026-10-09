@@ -13,7 +13,6 @@ const SLOT_RADIUS = 6.8;
 
 let renderer = null;
 let composer = null;
-let bloomPass = null;
 let scene = null;
 let camera = null;
 let controls = null;
@@ -30,6 +29,7 @@ let slots = [];
 let built = new Map();
 let satellites = [];
 const raycaster = new THREE.Raycaster();
+const pickNdc = new THREE.Vector2();
 const hitTargets = new Map();
 let selectCb = null;
 let hoverCb = null;
@@ -299,8 +299,8 @@ function placeRing(ring, id, grow) {
 
 function pickAt(ev) {
     const rect = renderer.domElement.getBoundingClientRect();
-    const ndc = new THREE.Vector2(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
-    raycaster.setFromCamera(ndc, camera);
+    pickNdc.set(((ev.clientX - rect.left) / rect.width) * 2 - 1, -((ev.clientY - rect.top) / rect.height) * 2 + 1);
+    raycaster.setFromCamera(pickNdc, camera);
     const hits = raycaster.intersectObjects([...hitTargets.keys()], false);
     return hits.length ? hitTargets.get(hits[0].object)() : null;
 }
@@ -459,7 +459,7 @@ function buildSlots() {
         disk.position.set(x, 0.02, z);
         scene.add(disk);
 
-        const slot = { x, z, disk, occupied: false, buildingId: null };
+        const slot = { x, z, disk, buildingId: null };
         const hit = new THREE.Mesh(new THREE.CylinderGeometry(1.35, 1.35, 2.4, 12), new THREE.MeshBasicMaterial({ visible: false }));
         hit.position.set(x, 1.2, z);
         scene.add(hit);
@@ -578,9 +578,7 @@ function buildTitan(group) {
         return m;
     };
     [-0.85, 0.85].forEach((dx) => {
-        addKit(group, 'supports_high', { x: dx, y: 0.15, z: -0.45, s: 0.5 });
-        addKit(group, 'supports_high', { x: dx, y: 0.65, z: -0.45, s: 0.5 });
-        addKit(group, 'supports_high', { x: dx, y: 1.15, z: -0.45, s: 0.5 });
+        [0.15, 0.65, 1.15].forEach((y) => addKit(group, 'supports_high', { x: dx, y, z: -0.45, s: 0.5 }));
     });
     box(1.95, 0.1, 0.26, 0, 1.7, -0.45, gold);
     [-0.18, 0.18].forEach((dx) => {
@@ -601,13 +599,7 @@ function removeBuilding(id) {
     const b = built.get(id);
     if (!b) return;
     scene.remove(b.group);
-    b.group.traverse((o) => {
-        if (o.isMesh) {
-            o.geometry.dispose();
-            o.material.dispose();
-        }
-    });
-    b.slot.occupied = false;
+    disposeTree(b.group);
     b.slot.buildingId = null;
     b.slot.disk.visible = true;
     built.delete(id);
@@ -733,8 +725,7 @@ function mount(el) {
         pmrem.dispose();
         composer = new EffectComposer(renderer);
         composer.addPass(new RenderPass(scene, camera));
-        bloomPass = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.45, 0.92);
-        composer.addPass(bloomPass);
+        composer.addPass(new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.45, 0.92));
         composer.addPass(new OutputPass());
         renderer.domElement.style.position = 'absolute';
         renderer.domElement.style.inset = '0';
@@ -831,9 +822,8 @@ function sync(buildingIds, levels, coreLevel, researchBranches, cityTokens) {
             if (lvl > entry.level) applyBuildingLevel(entry, lvl, true);
             return;
         }
-        const slot = slots.find((s) => !s.occupied);
+        const slot = slots.find((s) => !s.buildingId);
         if (!slot) return;
-        slot.occupied = true;
         slot.buildingId = id;
         slot.disk.visible = false;
 

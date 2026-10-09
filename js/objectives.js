@@ -13,9 +13,14 @@ function frontier() {
     return MAP_NODES.filter(n => ids.has(n.id) && n.type !== 'capital' && m.owner[n.id] !== 'player' && !m.allied[n.id]);
 }
 
+function oddsKey(...extra) {
+    const mood = state.resources.stability < BALANCE.stabilityLow ? -1 : state.resources.stability > BALANCE.stabilityHigh ? 1 : 0;
+    return [state.turn, state.army.join(','), state.heroes.join(','), state.research.join(','), JSON.stringify(state.map.allied), mood, state.retreatAt, ...extra].join('|');
+}
+
 function bestTarget() {
     if (!state.army.length) return null;
-    const key = [state.turn, state.army.join(','), state.heroes.join(','), JSON.stringify(state.map.owner), state.retreatAt].join('|');
+    const key = oddsKey(JSON.stringify(state.map.owner));
     if (targetCache.key === key) return targetCache.best;
     let best = null;
     const from = state.map.armyAt || 'alpha7';
@@ -32,7 +37,7 @@ function bestTarget() {
 function berlinOdds() {
     if (!state.army.length) return 0;
     const node = getNode('berlin');
-    const key = [state.turn, state.army.join(','), state.heroes.join(','), garrisonBudgetFor(node), state.retreatAt].join('|');
+    const key = oddsKey(garrisonBudgetFor(node), JSON.stringify(state.map.owner));
     if (berlinOddsCache.key !== key) berlinOddsCache = {key, win: estimateBattle(assaultUnits('berlin', state.army), generateForce(garrisonBudgetFor(node), garrisonSeed('berlin')), 40, {retreatAt: state.retreatAt}).win};
     return berlinOddsCache.win;
 }
