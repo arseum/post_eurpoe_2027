@@ -389,6 +389,7 @@ function renderDrawer() {
     else if (openDrawer === 'army') el.innerHTML = drawerShell('Forces', 'Armée de campagne', armyBody());
     else if (openDrawer === 'heroes') el.innerHTML = drawerShell('Champions', 'Héros', heroesBody());
     else if (openDrawer === 'log') el.innerHTML = drawerShell('Chroniques', 'Journal', logBody());
+    else if (openDrawer === 'help') el.innerHTML = drawerShell('PROMETHEUS', 'Aide', helpBody());
     const body = el.querySelector('.dr-body');
     if (openDrawer === 'log') body.scrollTop = body.scrollHeight;
     else if (same) body.scrollTop = scroll;

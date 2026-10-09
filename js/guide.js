@@ -83,7 +83,7 @@ const GUIDE_STEPS = [
         target: () => gq('#research-modal .rs-item.avail') || gq('#research-modal'), ack: true, inResearch: true
     },
     {
-        text: 'Le reste vous appartient, Commandant. Je vous signalerai l\'essentiel en chemin. Le bouton <b>Guide</b> du rail me rappelle ou me fait taire.',
+        text: 'Le reste vous appartient, Commandant. Je vous signalerai l\'essentiel en chemin. Le bouton <b>Aide</b> du rail rappelle le déroulé d\'une partie, les termes du jeu et les destins possibles.',
         target: () => gq('#btn-guide'), ack: true
     }
 ];
@@ -137,6 +137,60 @@ const GUIDE_TIPS = [
         trigger: s => s.phase === 'build' && s.chapter >= 2,
         target: () => nodeLabel('outpost'),
         text: 'Les avant-postes de <b>Strasbourg</b> et <b>Munich</b> ravitaillent Berlin. Chacun pris affaiblit sa garnison avant l\'assaut final.'
+    },
+    {
+        id: 'cityConquered',
+        trigger: s => s.phase === 'build' && conqueredCities(s) >= 1,
+        target: () => gq('#objectives'),
+        text: 'Une cité libre sous notre bannière. Son atout est actif, mais l\'<b>occupation</b> pèse sur la stabilité chaque tour. Laissez-y une garnison : Hegemonia vise en priorité nos territoires.'
+    },
+    {
+        id: 'cityAllied',
+        trigger: s => s.phase === 'build' && alliedCities(s) >= 1,
+        target: () => gq('#objectives'),
+        text: 'Une alliée rend son service tant qu\'elle tient. Elle se défend seule, mais peut tomber face à une grosse menace. Reprendre une alliée tombée la libère et renoue le pacte.'
+    },
+    {
+        id: 'upkeep',
+        trigger: s => s.phase === 'build' && getUpkeep() >= 3 && getUpkeep() * 4 > getCampaignProduction().energy + getUpkeep(),
+        target: () => gq('#res-plates .res'),
+        text: 'Notre armée pèse sur le réacteur : l\'<b>entretien</b> consomme plus d\'un quart de notre énergie. Bâtissez ou améliorez un Réacteur, ou libérez des unités, sinon c\'est le blackout.'
+    },
+    {
+        id: 'lowStability', urgent: true,
+        trigger: s => s.phase === 'build' && s.resources.stability < BALANCE.stabilityLow,
+        target: () => gq('#res-plates .res:nth-child(4)'),
+        text: 'La population gronde : sous 30 de <b>stabilité</b>, nos unités perdent 2 ATK, et à 0 c\'est la révolte. Quartiers, Bouclier du Dôme et certains choix d\'événements la remontent.'
+    },
+    {
+        id: 'researchTier',
+        trigger: s => s.phase === 'build' && researchTierDone(),
+        target: () => railBtn('dome'),
+        text: 'Ce palier de recherche est épuisé. <b>Éveillez mon Cœur</b> depuis le panneau Dôme pour ouvrir le suivant et agrandir l\'armée.'
+    },
+    {
+        id: 'newUnit',
+        trigger: s => s.phase === 'build' && UNITS.some(u => !u.always && s.buildings.includes(u.building)),
+        target: () => railBtn('army'),
+        text: 'Une nouvelle unité est disponible dans le panneau Armée. Survolez-la : ligne avant ou arrière, soins, esquive… Mélanger les rôles rend l\'armée bien plus solide.'
+    },
+    {
+        id: 'chapter3',
+        trigger: s => s.phase === 'build' && s.chapter >= 3,
+        target: () => nodeLabel('berlin'),
+        text: 'Deux routes mènent à Berlin. <b>L\'Ouest</b>, par Strasbourg : courte, mais très défendue. <b>L\'Est</b>, par Zurich et Munich : plus longue, mais plus abordable. Chaque avant-poste pris affaiblit la capitale.'
+    },
+    {
+        id: 'nodeLost',
+        trigger: s => s.phase === 'build' && Object.keys(s.map.lost).length >= 1,
+        target: () => gq('#objectives'),
+        text: 'Un territoire est perdu. Le reprendre reste possible, mais sa garnison grossit avec le temps : n\'attendez pas trop.'
+    },
+    {
+        id: 'retreat',
+        trigger: s => s.phase === 'build' && (s.stats.retreats + s.stats.assaultsLost) >= 1,
+        target: () => railBtn('army'),
+        text: 'Un assaut a mal tourné. Avant chaque attaque, l\'écran <b>Préparer l\'assaut</b> estime nos chances, et la consigne de <b>repli</b> fait reculer l\'armée avant qu\'elle ne soit anéantie.'
     }
 ];
 
@@ -182,7 +236,7 @@ function currentGuideItem() {
         save();
     }
     const stepsDone = g.step >= GUIDE_STEPS.length;
-    const tip = GUIDE_TIPS.find(t => !g.seen.includes(t.id) && (t.urgent || stepsDone) && t.trigger(state));
+    const tip = GUIDE_TIPS.find(t => !g.seen.includes(t.id) && (t.urgent || stepsDone || state.turn >= 3) && t.trigger(state));
     if (tip) {
         g.tip = tip.id;
         save();
@@ -220,8 +274,6 @@ function guideUpdate() {
         guideTarget = null;
         return;
     }
-    const railGuide = document.getElementById('btn-guide');
-    if (railGuide) railGuide.classList.toggle('active', state.guide.on);
     const cur = state.guide.on ? currentGuideItem() : vitalGuideItem();
     if (!cur || !guideVisible(cur)) {
         card.classList.remove('show');
@@ -284,16 +336,65 @@ function guideSkip() {
     state.guide.on = false;
     save();
     guideUpdate();
-    toast('Guide en pause. Le bouton Guide du rail le rappelle.', '');
+    toast('Guide en pause. Le bouton Aide du rail permet de le réactiver.', '');
+}
+
+let helpTab = 'deroule';
+
+function setHelpTab(t) {
+    helpTab = t;
+    renderDrawer();
+}
+
+function replayGuide() {
+    state.guide.on = true;
+    state.guide.step = 0;
+    state.guide.tip = null;
+    enterStep(state.guide);
+    guideKey = null;
+    openDrawer = null;
+    save();
+    renderBuildPhase();
+}
+
+function chapterGate(ch) {
+    return MAP_NODES.filter(n => n.unlocksChapter === ch).map(n => n.name).join(', ');
+}
+
+function helpDeroule() {
+    const ch = CHAPTERS.map(c => {
+        const gate = c.num === 1 ? 'Dès le début.' : `S'ouvre quand vous tenez : ${chapterGate(c.num)}.`;
+        return `<div class="help-item${state.chapter === c.num ? ' now' : ''}"><div class="help-h">Chapitre ${c.num} · ${esc(chapterTitle(c))}</div><p>${esc(c.desc)} ${gate} Il débloque de nouveaux bâtiments.</p></div>`;
+    }).join('');
+    const defeats = Object.entries(DEFEATS).map(([k, d]) => `<li><b>${esc(d.title)}</b> · ${{annihilation: 'Alpha-7 tombe.', blackout: 'L\'énergie tombe à 0.', revolte: 'La stabilité tombe à 0.', capitulation: 'Vous choisissez de vous rendre.'}[k] || ''}</li>`).join('');
+    return `<div class="help-item"><div class="help-h">Le but</div><p>${glossText('Libérer Berlin, capitale d\'Hegemonia. Prendre les avant-postes de Strasbourg et Munich affaiblit sa garnison. Votre façon de gagner décide de la fin : voir l\'onglet Destins.')}</p></div>`
+        + `<div class="help-item"><div class="help-h">Un tour</div><p>${glossText('Donnez vos ordres : chacun coûte 1 point de commandement, recruter est gratuit. Puis terminez le tour : la production tombe, l\'armée avance, les menaces approchent, des événements surviennent.')}</p></div>`
+        + `<div class="help-item"><div class="help-h">Les menaces</div><p>${glossText('Hegemonia attaque vos territoires, annoncés quelques tours à l\'avance. Sans garnison ni armée sur place, un territoire tombe. Si Alpha-7 tombe, la partie est perdue.')}</p></div>`
+        + ch + `<div class="help-item"><div class="help-h">Défaites</div><ul>${defeats}</ul></div>`;
+}
+
+function helpConcepts() {
+    const terms = Object.values(GLOSSARY).map(g => `<div class="help-item"><div class="help-h">${esc(g.title)}</div><p>${richText(g.text)}</p></div>`).join('');
+    const seen = GUIDE_TIPS.filter(t => state.guide.seen.includes(t.id)).map(t => `<div class="help-item tip"><p>${t.text}</p></div>`).join('');
+    return terms + (seen ? `<div class="sec-label">Conseils déjà reçus</div>${seen}` : '');
+}
+
+function helpDestins() {
+    const now = resolveEnding();
+    return `<p class="help-intro">La fin dépend de votre façon de gagner. Celle en surbrillance est celle que vous obtiendriez si Berlin tombait maintenant.</p>` + Object.entries(ENDINGS).map(([k, e]) => `<div class="help-item${k === now ? ' now' : ''}"><div class="help-h">${esc(e.title)} <span class="help-sub">${esc(e.sub)}</span></div><p>${richText(e.hint)}</p></div>`).join('');
+}
+
+function helpBody() {
+    const tabs = [['deroule', 'Déroulé'], ['concepts', 'Concepts'], ['destins', 'Destins']].map(([k, l]) => `<button class="speed-btn${helpTab === k ? ' active' : ''}" onclick="setHelpTab('${k}')">${l}</button>`).join('');
+    const guide = `<div class="help-guide"><button class="btn btn-ghost" onclick="toggleGuide()">${ic(state.guide.on ? 'bell-slash' : 'bell')}${state.guide.on ? 'Couper les conseils' : 'Activer les conseils'}</button><button class="btn btn-ghost" onclick="replayGuide()">${ic('arrow-counter-clockwise')}Rejouer le tutoriel</button></div><p class="help-note">${ic('warning-diamond')}Les alertes de danger restent affichées même conseils coupés.</p>`;
+    const body = helpTab === 'concepts' ? helpConcepts() : helpTab === 'destins' ? helpDestins() : helpDeroule();
+    return guide + `<div class="seg help-tabs">${tabs}</div><div class="help-list">${body}</div>`;
 }
 
 function toggleGuide() {
     state.guide.on = !state.guide.on;
-    if (state.guide.on && state.guide.step >= GUIDE_STEPS.length && !state.guide.tip) {
-        state.guide.step = 0;
-        enterStep(state.guide);
-    }
     guideKey = null;
     save();
+    if (openDrawer === 'help') renderDrawer();
     guideUpdate();
 }

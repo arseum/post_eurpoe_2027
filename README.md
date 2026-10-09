@@ -21,7 +21,7 @@ Voir `tools/sim/README.md` pour les options (bots, graine, objectifs de fin, sor
 - `index.html`, `style.css` : interface et styles
 - `js/data.js` : données du jeu (équilibrage, unités, bâtiments, carte, événements, recherche, fins)
 - `js/game.js` : état, règles, tours, combats, sauvegarde
-- `js/render.js`, `js/guide.js` : interface et guide de PROMETHEUS
+- `js/render.js`, `js/guide.js`, `js/objectives.js` : interface, guide et conseils de PROMETHEUS, tiroir Aide, suivi d'objectifs
 - `js/scene3d.js`, `js/base3d.js`, `js/map3d.js`, `js/fx3d.js`, `js/emblem3d.js`, `js/geo-europe.js` : scènes 3D, emblèmes des cités et géographie
 - `js/audio.js` : sons
 - `js/version.template.js` : version injectée au déploiement

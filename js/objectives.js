@@ -31,10 +31,10 @@ const OBJECTIVE_RULES = [
         text: 'Laisser une garnison à Alpha-7',
         help: 'Si Alpha-7 est attaquée sans défenseurs, la partie est perdue. Les recrues vont en garnison quand l\'armée est loin du dôme.'
     }] : [],
-    s => heldTerritories(s) === 0 ? [{
+    s => s.chapter === 1 ? [{
         icon: 'flag-banner', go: `selectNode('lyon')`,
-        text: 'Prendre ou rallier un premier territoire',
-        help: 'Une cité (prise ou alliée) ou une ruine reprise : votre premier territoire ouvre le chapitre 2.'
+        text: 'Tenir Lyon, Marseille ou le CERN',
+        help: 'Prendre ou rallier Lyon ou Marseille, ou reprendre les Ruines du CERN, ouvre le chapitre 2 : de nouveaux bâtiments et de nouvelles recherches.'
     }] : [],
     () => researchTierDone() ? [{
         icon: 'atom', go: `setCenterView('base'); selectBase('core')`,

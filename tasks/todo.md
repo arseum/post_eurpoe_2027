@@ -180,5 +180,12 @@ Experts 88/90/90 %, moyen 44 %, les 6 fins obtenues sur 50 parties, victoire typ
 - [x] Étape 1 : infobulles différées (400 ms), glossaire `GLOSSARY` (19 termes, dont garnison adverse), `glossText` / `term`, explication des atouts (`identity.*.help`), définitions dans les infobulles stabilité / influence et les stats PV/ATK/DEF/VIT
 - [x] Étape 2 : menaces (pré-alerte tour 3, alertes vitales hors guide, carte qui pulse, confirmation de fin de tour)
 - [x] Étape 3 : suivi d'objectifs (`js/objectives.js` : jauge de Berlin, destin en vue avec les 6 fins, 2 objectifs court terme cliquables, repliable, masqué sous un tiroir)
-- [ ] Étape 4 : nouveaux conseils hors étapes, tiroir Aide (Objectifs, Concepts, Destins)
-- [ ] Étape 5 : tests Chrome guide activé et désactivé, harnais identique, revue, documentation
+- [x] Étape 4 : 10 nouveaux conseils (débloqués dès le tour 3 même tutoriel en cours), tiroir Aide (Déroulé, Concepts, Destins, couper les conseils, rejouer le tutoriel) à la place du bouton Guide
+- [x] Étape 5 : tests Chrome guide activé et désactivé, harnais identique, revue, documentation
+
+### Revue (2026-10-09)
+
+- Harnais identique à chaque étape (aucune règle modifiée).
+- Chrome : délai des infobulles (rien à 150 ms, visible à 600 ms), termes et atouts expliqués, pré-alerte et alerte de menace guide coupé, confirmation « Alpha-7 est en danger » malgré « Ne plus me demander » puis disparue une fois défendue, suivi d'objectifs (début, milieu, replié, masqué sous tiroir, 1280×720), tiroir Aide, conseils hors tutoriel, début de partie complet guide activé jusqu'au tour 3.
+- Corrigé en route : l'objectif « premier territoire » annonçait le chapitre 2 pour n'importe quel territoire, alors que seuls Lyon, Marseille et le CERN l'ouvrent ; « Activer les conseils » relançait le tutoriel terminé (désormais séparé de « Rejouer le tutoriel »).
+- Limite : le texte du chapitre 1 parle encore de « repousser les premières menaces » (inchangé).

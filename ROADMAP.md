@@ -10,6 +10,7 @@
 - [x] Événements narratifs à choix, arbre de recherche, héros blessés
 - [x] Direction artistique « Bastion doré » et scènes 3D
 - [x] Guide de PROMETHEUS pour le début de partie
+- [x] Accompagnement : suivi d'objectifs (Berlin, destin en vue, objectifs court terme), glossaire au survol, alertes de menace même guide coupé, conseils à chaque nouveau concept, tiroir Aide (Déroulé, Concepts, Destins)
 - [x] Sauvegarde avec confirmation avant écrasement
 - [x] Bilan de fin détaillé (assauts, défenses, replis, pertes)
 - [x] Harnais d'équilibrage `tools/sim` (bots conquête, diplomatie, tortue, moyen)

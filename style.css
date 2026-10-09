@@ -1826,6 +1826,90 @@ button:focus-visible, [tabindex]:focus-visible {
     color: var(--danger)
 }
 
+.help-guide {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px
+}
+
+.help-guide .btn {
+    min-height: 36px;
+    font-size: .72rem;
+    padding: 0 8px
+}
+
+.help-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 14px;
+    font-size: .76rem;
+    color: var(--text-2)
+}
+
+.help-note i {
+    color: var(--danger)
+}
+
+.help-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    margin-bottom: 12px
+}
+
+.help-list {
+    display: grid;
+    gap: 8px
+}
+
+.help-intro {
+    font-size: .84rem;
+    color: var(--text-2);
+    line-height: 1.45
+}
+
+.help-item {
+    padding: 10px 12px;
+    background: rgba(4, 8, 15, .5);
+    border: 1px solid var(--gold-3);
+    border-left: 2px solid var(--gold-2)
+}
+
+.help-item.now {
+    border-left-color: var(--teal);
+    background: linear-gradient(90deg, rgba(10, 200, 185, .08), rgba(4, 8, 15, .5))
+}
+
+.help-item.tip {
+    border-left-color: var(--teal-2)
+}
+
+.help-h {
+    font-family: var(--font-display);
+    font-size: .98rem;
+    color: var(--gold-hi);
+    margin-bottom: 4px
+}
+
+.help-sub {
+    font-family: var(--font-ui);
+    font-size: .74rem;
+    color: var(--text-2);
+    letter-spacing: .04em
+}
+
+.help-item p, .help-item li {
+    font-size: .84rem;
+    line-height: 1.5;
+    color: var(--text)
+}
+
+.help-item ul {
+    list-style: none;
+    display: grid;
+    gap: 4px
+}
+
 #threats {
     position: absolute;
     left: 104px;
