@@ -1521,6 +1521,149 @@ button:focus-visible, [tabindex]:focus-visible {
     gap: 6px
 }
 
+.np-identity {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    color: var(--gold-1);
+    letter-spacing: .04em;
+    margin-bottom: 6px
+}
+
+.city-cards {
+    display: grid;
+    gap: 8px;
+    margin-top: 14px
+}
+
+.city-card {
+    --cc: var(--st-player);
+    position: relative;
+    display: grid;
+    gap: 5px;
+    margin-top: 14px;
+    padding: 10px 12px 12px 14px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--cc) 9%, transparent), rgba(4, 8, 15, .55) 70%);
+    border: 1px solid color-mix(in srgb, var(--cc) 40%, var(--gold-3))
+}
+
+.city-cards .city-card {
+    margin-top: 0
+}
+
+.city-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--cc)
+}
+
+.city-card.ally {
+    --cc: var(--st-allied)
+}
+
+.city-card.active {
+    border-color: var(--cc);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--cc) 30%, transparent), 0 0 18px color-mix(in srgb, var(--cc) 18%, transparent)
+}
+
+.city-card.dim {
+    filter: saturate(.25);
+    opacity: .7
+}
+
+.cc-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between
+}
+
+.cc-kind {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .18em;
+    text-transform: uppercase;
+    color: var(--cc)
+}
+
+.cc-flag {
+    padding: 2px 8px;
+    font-size: .62rem;
+    font-weight: 600;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-0);
+    background: var(--cc)
+}
+
+.cc-name {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--gold-hi);
+    line-height: 1.15
+}
+
+.cc-prod {
+    font-size: .86rem
+}
+
+.cc-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .86rem
+}
+
+.cc-line > i {
+    color: var(--gold-1);
+    font-size: 1.05rem
+}
+
+.cc-line .cc-l {
+    flex: 1;
+    color: var(--text)
+}
+
+.cc-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: .78rem;
+    line-height: 1.4;
+    color: var(--text-2)
+}
+
+.cc-note > i {
+    margin-top: 2px;
+    flex: none
+}
+
+.cc-note > span .ri, .cc-note > span i {
+    vertical-align: -2px
+}
+
+.city-card .btn {
+    justify-content: space-between;
+    min-height: 38px;
+    padding: 0 12px;
+    margin-top: 4px
+}
+
+.city-card .btn .lbl {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px
+}
+
 #threats {
     position: absolute;
     left: 104px;

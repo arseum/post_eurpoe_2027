@@ -67,8 +67,8 @@ const GUIDE_STEPS = [
         done: () => selectedNode === 'lyon'
     },
     {
-        text: '<b>Alliance</b> : on paie en influence, la cité partage sa production et se défend seule. <b>Assaut</b> : il faut vaincre sa garnison, et l\'occupation coûte de la stabilité.',
-        target: () => gq('#node-panel.open .np-actions') || gq('#node-panel.open'), ack: true
+        text: 'Chaque cité offre autre chose selon la voie choisie. <b>Prendre</b> Lyon nous livre son réseau d\'écoute, au prix de la stabilité. <b>S\'allier</b> coûte de l\'influence, et sa Ligue marchande nous ouvre les autres cités.',
+        target: () => gq('#node-panel.open .city-cards') || gq('#node-panel.open'), ack: true
     },
     {
         text: 'Quand vos ordres sont donnés, <b>terminez le tour</b>. La production tombe, les armées avancent, les menaces approchent.',

@@ -154,6 +154,10 @@ Experts 88/90/90 %, moyen 44 %, les 6 fins obtenues sur 50 parties, victoire typ
 - [x] Spécification rédigée
 - [x] Validation de la spec par l'utilisateur
 - [x] Étape 1 : `identity` dans `MAP_NODES`, `cityDividend`, `sealAlliance`, `unitCost`, milice de Marseille, harnais (iso-résultat puis réglage)
-- [ ] Étape 2 : panneau de colonie (cartes Prendre / S'allier), infobulles, toasts, guide
+- [x] Étape 2 : panneau de colonie (cartes Prendre / S'allier), infobulles, toasts, guide
+  - Cartes empilées (368 px de large), garnison estimée dans la carte Prendre, action dans chaque carte ; cité tenue = carte active ; perdue / alliée tombée = carte grisée
+  - Infobulle des ressources : « Dont Lyon, La Ligue marchande +4 » ; journal à la prise et à la perte (« Atout perdu », « Pacte rompu »)
+  - Guide : l'étape Lyon présente les deux voies et cible les cartes
+  - Vérifié : harnais identique (règles inchangées), Chrome 1440×900 (tient sans défilement) et 1280×720 (défile), 0 erreur
 - [ ] Étape 3 : 3D (emblèmes carte, étendards et accessoires base, milice en combat : teinte alliée, aujourd'hui des Pillards rouges)
 - [ ] Étape 4 : tests Chrome, revue, README / ROADMAP / mémoire

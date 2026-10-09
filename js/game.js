@@ -1032,6 +1032,7 @@ async function resolveCombat(c) {
                 m.cacheLooted[c.node] = true;
                 addLog('📦 Cache récupérée : ' + fmtProd(node.cache), 'build');
             }
+            if (node.identity) addLog('↳ ' + node.identity.conquest.name + ' : ' + node.identity.conquest.desc, 'chapter');
             if (node.type === 'city') {
                 state.flags.citeConquise = true;
                 state.resources.stability -= BALANCE.cityConquestStability;
@@ -1112,6 +1113,7 @@ async function resolveCombat(c) {
             }
             state.resources.stability -= BALANCE.nodeLostStability;
             addLog('🔥 ' + node.name + ' est tombé — -' + BALANCE.nodeLostStability + '🏛️', 'warning');
+            if (node.identity) addLog('↳ Atout perdu : ' + node.identity.conquest.name, 'warning');
         }
     }
     state.phase = 'build';
@@ -1132,6 +1134,7 @@ function allyFalls(node) {
     m.fallenAllies[node.id] = true;
     state.resources.influence -= BALANCE.allyFallInfluence;
     addLog('🔥 ' + node.name + ' (allié) est tombé aux mains d\'Hegemonia — -' + BALANCE.allyFallInfluence + '🌐. Reprenez-la pour la libérer', 'warning');
+    if (node.identity) addLog('↳ Pacte rompu : ' + node.identity.alliance.name, 'warning');
 }
 
 function alliedHolds(th) {

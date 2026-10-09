@@ -149,7 +149,8 @@ function renderTop() {
         const critical = k === 'stability' && v <= 20;
         if (lastResources && lastResources[k] !== v) bumped.push(k);
         const upkeep = k === 'energy' ? getUpkeep() : 0;
-        const body = `Réserve <span>${v} / ${meta.max}</span><br>Par tour <span>${p >= 0 ? '+' : ''}${p}</span>` + (upkeep ? `<br>Dont entretien des unités <span>−${upkeep}</span>` : '') + (critical ? '<br><span style="color:var(--danger)">Stabilité critique : risque de révolte</span>' : '');
+        const cities = MAP_NODES.map(n => [n, cityDividend(n)]).filter(([, d]) => d && d.prod[k]).map(([n, d]) => `<br>Dont ${esc(n.name)}, ${esc(d.name)} <span>+${d.prod[k]}</span>`).join('');
+        const body = `Réserve <span>${v} / ${meta.max}</span><br>Par tour <span>${p >= 0 ? '+' : ''}${p}</span>` + cities + (upkeep ? `<br>Dont entretien des unités <span>−${upkeep}</span>` : '') + (critical ? '<br><span style="color:var(--danger)">Stabilité critique : risque de révolte</span>' : '');
         html += `<div class="res${critical ? ' critical' : ''}${bumped.includes(k) ? ' bump' : ''}" data-tt="${tt(meta.label, body)}">${resIcon(k)}<span class="res-val">${v}</span><span class="res-prod${p < 0 ? ' neg' : ''}">${p >= 0 ? '+' : ''}${p}</span></div>`;
     }
     lastResources = {...state.resources};
@@ -469,9 +470,9 @@ function renderNodePanel() {
     const m = state.map;
     const st = nodeStatus(id);
     const owned = st === 'player', allied = st === 'allied';
-    let body = `<p class="np-desc">${esc(node.desc)}</p><div class="np-facts">`;
+    let body = (node.identity ? `<div class="np-identity">${esc(node.identity.title)}</div>` : '') + `<p class="np-desc">${esc(node.desc)}</p><div class="np-facts">`;
     const prod = nodeProd(node);
-    if ((owned || allied) && Object.keys(prod).length) {
+    if ((owned || allied) && !node.identity && Object.keys(prod).length) {
         body += `<div class="fact">${ic('coins')}<span class="fact-l">Rapporte chaque tour</span>${fxHtml(prod)}</div>`;
     }
     if (node.cache && !m.cacheLooted[id] && !owned) {
@@ -482,7 +483,7 @@ function renderNodePanel() {
         const pv = getForcePreview(threat.budget, threat.seed);
         body += `<div class="fact threat">${ic('warning-diamond')}<span class="fact-l">Attaque dans ${threat.arrivesIn} tour(s)</span>${forceHtml(pv)}</div>`;
     }
-    if (!owned && !allied) {
+    if (!owned && !allied && !(node.identity && m.owner[id] === 'neutral')) {
         const pv = getForcePreview(garrisonBudgetFor(node), garrisonSeed(id));
         body += `<div class="fact">${ic('shield-warning')}<span class="fact-l">Garnison estimée</span>${forceHtml(pv)}</div>`;
         if (m.fallenAllies[id]) body += `<div class="fact">${ic('handshake')}<span class="fact-l">Ancienne alliée occupée : la reprendre la libère et renoue l'alliance</span></div>`;
@@ -500,23 +501,23 @@ function renderNodePanel() {
     if (m.armyAt === id && !m.armyDest) {
         body += `<div class="fact">${ic('flag-banner')}<span class="fact-l">Votre armée stationne ici</span><button class="btn btn-ghost" style="min-height:28px;padding:0 10px" onclick="toggleDrawer('army')">Gérer</button></div>`;
     }
-    body += '</div><div class="np-actions">';
+    body += '</div>';
     const linked = m.armyAt ? linkTurns(m.armyAt, id) : null;
     const canMarch = linked && !m.armyDest;
     const noArmy = !state.army.length;
     const action = (icon, label, fn, reason, extra = '') => `<button class="btn btn-primary" ${reason ? 'disabled' : ''} data-tt="${esc(reason)}" onclick="${fn}"><span class="lbl">${ic(icon)}${label}</span><span class="cost">${extra}${cmdChip()}</span></button>`;
+    const neutralCity = node.type === 'city' && m.owner[id] === 'neutral' && !allied;
+    if (node.identity) body += cityCards(node, st, neutralCity ? {
+        take: canMarch ? action('sword', 'Préparer l\'assaut', `openAssault('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`) : '',
+        ally: allyAction(node, action)
+    } : {});
+    body += '<div class="np-actions">';
     if (owned && !m.fortified[id]) {
         body += action('wall', 'Fortifier', `fortifyNode('${id}')`, blockReason(null, true), '<span>+' + BALANCE.fortifyDef + ' DEF</span>');
     } else if (owned && m.fortified[id]) {
         body += `<div class="fact">${ic('wall')}<span class="fact-l">Fortifié : +${BALANCE.fortifyDef} DEF au prochain combat</span></div>`;
     }
-    if (node.type === 'city' && m.owner[id] === 'neutral' && !allied) {
-        const cost = getAllyCost(node);
-        const short = (state.resources.influence || 0) < cost;
-        const r = blockReason(null, true) || (short ? 'Influence insuffisante' : '');
-        body += action('handshake', 'Proposer une alliance', `allyCity('${id}')`, r, `<span class="${short ? 'short' : ''}">${resIcon('influence')}${cost}</span>`);
-    }
-    if ((st === 'hostile' || (node.type === 'city' && st === 'neutral')) && canMarch) {
+    if (st === 'hostile' && canMarch) {
         body += action('sword', 'Préparer l\'assaut', `openAssault('${id}')`, noArmy ? 'Votre armée est vide' : blockReason(null, true), `<span>${ic('hourglass-medium')}${linked}</span>`);
     }
     if ((owned || allied) && canMarch && m.armyAt !== id) {
@@ -529,6 +530,33 @@ function renderNodePanel() {
 
     el.style.setProperty('--st', `var(--st-${st})`);
     el.innerHTML = `<div class="np-banner"><span class="np-glyph">${ic(ICONS.node[node.type])}</span><span class="flag">${STATUS_LABEL[st]}</span><h2>${esc(node.name)}</h2><div class="eyebrow" style="color:var(--text-2)">${TYPE_LABEL[node.type]}</div><button class="dr-close" style="position:absolute;top:14px;right:14px" onclick="closeNodePanel()" aria-label="Fermer">${ic('x')}</button></div><div class="dr-body">${body}</div>`;
+}
+
+function allyAction(node, action) {
+    const cost = getAllyCost(node);
+    const short = (state.resources.influence || 0) < cost;
+    const r = blockReason(null, true) || (short ? 'Influence insuffisante' : '');
+    return action('handshake', 'Proposer une alliance', `allyCity('${node.id}')`, r, `<span class="${short ? 'short' : ''}">${resIcon('influence')}${cost}</span>`);
+}
+
+function cityCard(kind, d, opts) {
+    const label = kind === 'take' ? 'Prendre' : 'S\'allier';
+    const flag = opts.active ? '<span class="cc-flag">Actif</span>' : '';
+    const extra = opts.extra || '';
+    const note = opts.note ? `<div class="cc-note">${ic(opts.noteIcon || 'info')}<span>${opts.note}</span></div>` : '';
+    return `<div class="city-card ${kind}${opts.active ? ' active' : ''}${opts.dim ? ' dim' : ''}"><div class="cc-head"><span class="cc-kind">${ic(kind === 'take' ? 'sword' : 'handshake')}${label}</span><span class="cc-prod" data-tt="${tt('Chaque tour', 'Production de la cité tant que ce statut dure')}">${fxHtml(d.prod)}</span></div><div class="cc-name">${esc(d.name)}${flag}</div><div class="cc-line">${ic('seal-check')}<span class="cc-l">${richText(d.desc.charAt(0).toUpperCase() + d.desc.slice(1))}</span></div>${extra}${note}${opts.action || ''}</div>`;
+}
+
+function cityCards(node, st, actions) {
+    const m = state.map, idt = node.identity;
+    const takeNote = `Occupation : −${BALANCE.cityConquestStability}${resIcon('stability')} −${BALANCE.cityConquestInfluence}${resIcon('influence')}, puis −${BALANCE.occupationStability}${resIcon('stability')} par tour`;
+    const allyNote = 'Se défend seule, mais peut tomber';
+    if (st === 'player') return cityCard('take', idt.conquest, {active: true});
+    if (st === 'allied') return cityCard('ally', idt.alliance, {active: true});
+    if (m.fallenAllies[node.id]) return cityCard('ally', idt.alliance, {dim: true, note: 'Reprenez-la pour rétablir ce pacte.', noteIcon: 'arrow-counter-clockwise'});
+    if (m.lost[node.id]) return cityCard('take', idt.conquest, {dim: true, note: 'Reprenez-la pour rétablir cet atout.', noteIcon: 'arrow-counter-clockwise'});
+    const garrison = `<div class="cc-line">${ic('shield-warning')}<span class="cc-l">Garnison</span>${forceHtml(getForcePreview(garrisonBudgetFor(node), garrisonSeed(node.id)))}</div>`;
+    return `<div class="city-cards">${cityCard('take', idt.conquest, {extra: garrison, note: takeNote, noteIcon: 'warning', action: actions.take})}${cityCard('ally', idt.alliance, {note: allyNote, action: actions.ally})}</div>`;
 }
 
 function scaledProd(prod, lvl) {
