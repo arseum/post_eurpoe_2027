@@ -159,5 +159,10 @@ Experts 88/90/90 %, moyen 44 %, les 6 fins obtenues sur 50 parties, victoire typ
   - Infobulle des ressources : « Dont Lyon, La Ligue marchande +4 » ; journal à la prise et à la perte (« Atout perdu », « Pacte rompu »)
   - Guide : l'étape Lyon présente les deux voies et cible les cartes
   - Vérifié : harnais identique (règles inchangées), Chrome 1440×900 (tient sans défilement) et 1280×720 (défile), 0 erreur
-- [ ] Étape 3 : 3D (emblèmes carte, étendards et accessoires base, milice en combat : teinte alliée, aujourd'hui des Pillards rouges)
+- [x] Étape 3 : 3D (emblèmes carte, étendards et accessoires base, milice en combat)
+  - `js/emblem3d.js` partagé : balance (Lyon), ancre (Marseille), enclume (Turin)
+  - Carte : emblème au-dessus du dôme, teinte du statut, inclinée vers la caméra, léger balancement ; étiquette des cités remontée
+  - Base : étendard par atout actif autour de la tour (teal = prise, vert = alliée, emblème doré) ; Saisie : grue animée près de l'usine, forge rougeoyante à la caserne, parabole clignotante à l'antenne (retirées si la cité est perdue)
+  - Combat : « Milice marseillaise » en vert allié avec anneau au sol, ligne de journal à son arrivée
+  - Vérifié : harnais identique, captures Chrome (carte, base prise/alliée, combat), 0 erreur
 - [ ] Étape 4 : tests Chrome, revue, README / ROADMAP / mémoire

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { buildEmblem } from './emblem3d.js';
 
 const STATUS_COLOR = { player: 0x0ac8b9, allied: 0x5fb37e, neutral: 0xc8aa6e, hostile: 0xc8473c };
 const K = 2.2;
@@ -32,6 +33,7 @@ const linksByKey = new Map();
 const flags = [];
 const pulses = [];
 const spinners = [];
+const swayers = [];
 let armyGroup = null;
 let pendingSnapshot = null;
 let selectCb = null;
@@ -410,6 +412,16 @@ function createNode(n) {
     model.traverse(o => {
         if (o.userData.spin) spinners.push(o);
     });
+    let emblemMat = null;
+    if (n.emblem) {
+        emblemMat = glow(0xc8aa6e, 1.1);
+        const emblem = buildEmblem(n.emblem, emblemMat);
+        emblem.scale.setScalar(0.9);
+        emblem.position.y = 0.62;
+        emblem.rotation.x = -0.7;
+        group.add(emblem);
+        swayers.push({ obj: emblem, phase: Math.random() * 6 });
+    }
     const flag = makeFlag(0xffffff);
     flag.group.position.set(0.5, 0.03, -0.32);
     group.add(flag.group);
@@ -423,11 +435,11 @@ function createNode(n) {
     labelEl.className = 'm3d-label';
     labelEl.dataset.node = n.id;
     const label = new CSS2DObject(labelEl);
-    label.position.set(0, n.type === 'capital' ? 1.85 : 1.25, 0);
+    label.position.set(0, n.type === 'capital' ? 1.85 : n.emblem ? 2.1 : 1.25, 0);
     group.add(label);
     const hit = add(group, new THREE.CylinderGeometry(0.75, 0.75, 1.2, 12), new THREE.MeshBasicMaterial({ visible: false }), 0, 0.5);
     meshToNodeId.set(hit, n.id);
-    const entry = { id: n.id, group, model, haloMat, discMat, flagMat: flag.mat, sel, threat, labelEl, status: null, lon, lat, y };
+    const entry = { id: n.id, group, model, haloMat, discMat, flagMat: flag.mat, emblemMat, sel, threat, labelEl, status: null, lon, lat, y };
     nodesById.set(n.id, entry);
     return entry;
 }
@@ -439,6 +451,7 @@ function updateNode(e, n) {
         e.discMat.color.set(c);
         e.flagMat.color.set(c);
         e.flagMat.emissive.set(c);
+        if (e.emblemMat) e.emblemMat.emissive.set(c);
         e.status = n.status;
         e.labelEl.style.setProperty('--st', `var(--st-${n.status})`);
     }
@@ -676,6 +689,7 @@ function animate() {
         if (s > 1) e.model.scale.setScalar(Math.max(1, s - dt * 0.6));
     });
     for (const o of spinners) o.rotation.y += dt * 0.9;
+    for (const s of swayers) s.obj.rotation.y = Math.sin(t * 0.8 + s.phase) * 0.45;
     linksByKey.forEach(e => {
         if (e.mesh.material === e.live) e.tex.offset.x -= dt * 0.9 * e.dir;
     });

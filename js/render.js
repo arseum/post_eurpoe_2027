@@ -238,6 +238,10 @@ function nodeStatus(id, s = state) {
     return s.map.owner[id] === 'player' ? 'player' : (s.map.allied[id] ? 'allied' : s.map.owner[id]);
 }
 
+function cityTokens() {
+    return MAP_NODES.filter(n => n.identity && cityDividend(n)).map(n => ({id: n.id, kind: state.map.owner[n.id] === 'player' ? 'take' : 'ally', emblem: n.identity.emblem}));
+}
+
 function buildMapSnapshot(s = state) {
     const m = s.map;
     const reach = new Set();
@@ -247,7 +251,7 @@ function buildMapSnapshot(s = state) {
         return {
             id: n.id, name: n.name, glyph: ICONS.node[n.type], lon: n.geo.lon, lat: n.geo.lat,
             status: nodeStatus(n.id, s), selected: s === state && n.id === selectedNode,
-            threat: threat ? threat.arrivesIn : null, type: n.type
+            threat: threat ? threat.arrivesIn : null, type: n.type, emblem: n.identity ? n.identity.emblem : null
         };
     });
     if (!mapLinksCache) {
@@ -290,7 +294,7 @@ function renderBuildPhase() {
         setStageView('base3d-view');
         if (window.Base3D) {
             Base3D.mount(document.getElementById('base3d-view'));
-            Base3D.sync(state.buildings, state.buildingLevels, state.core, state.research.map(id => (RESEARCH.find(r => r.id === id) || {}).branch));
+            Base3D.sync(state.buildings, state.buildingLevels, state.core, state.research.map(id => (RESEARCH.find(r => r.id === id) || {}).branch), cityTokens());
             Base3D.onSelect(id => id ? selectBase(id) : (selectedBase && closeNodePanel()));
             Base3D.onHover(hoverBase);
             Base3D.setSelected(selectedBase);

@@ -6,6 +6,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { buildEmblem } from './emblem3d.js';
 
 const SLOT_COUNT = 10;
 const SLOT_RADIUS = 6.8;
@@ -38,6 +39,9 @@ let pointerEv = null;
 let pointerDown = null;
 let hoverRing = null;
 let selRing = null;
+const banners = new Map();
+const CITY_ORDER = ['lyon', 'marseille', 'turin'];
+const KIND_COLOR = { take: 0x0ac8b9, ally: 0x5fb37e };
 
 const KIT_PALETTE = {
     metal: { color: 0x8c99ab, roughness: 0.42, metalness: 0.65 },
@@ -809,7 +813,7 @@ function syncSatellites(researchBranches) {
     });
 }
 
-function sync(buildingIds, levels, coreLevel, researchBranches) {
+function sync(buildingIds, levels, coreLevel, researchBranches, cityTokens) {
     if (!scene) return;
     const ids = buildingIds || [];
     const lvls = levels || {};
@@ -839,6 +843,7 @@ function sync(buildingIds, levels, coreLevel, researchBranches) {
         applyBuildingLevel(entry, lvl, false);
         popIn(b.group, 1 + (lvl - 1) * 0.18);
     });
+    syncCityTokens(cityTokens);
 
     if (core > hqCoreLevel) {
         hqCoreLevel = core;
@@ -859,6 +864,150 @@ function sync(buildingIds, levels, coreLevel, researchBranches) {
             if (hqTop) hqTop.scale.setScalar(1);
         }
     }
+}
+
+function disposeTree(obj) {
+    obj.traverse((o) => {
+        if (o.isMesh) {
+            o.geometry.dispose();
+            o.material.dispose();
+        }
+    });
+}
+
+function makeBanner(token) {
+    const i = Math.max(0, CITY_ORDER.indexOf(token.id));
+    const a = 0.64 + [-1.2, 1.2, 2.55][i];
+    const group = new THREE.Group();
+    group.position.set(Math.sin(a) * 2.75, 0, Math.cos(a) * 2.75);
+    group.rotation.y = 0.64;
+    const gold = kitMaterial('metalRed');
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 2.9, 8), gold);
+    pole.position.y = 1.45;
+    group.add(pole);
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.05, 0.05), gold);
+    bar.position.set(0, 2.62, 0.06);
+    group.add(bar);
+    const c = KIND_COLOR[token.kind];
+    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 1.15), new THREE.MeshStandardMaterial({ color: 0x0a121c, roughness: 0.75, emissive: new THREE.Color(c), emissiveIntensity: 0.55, side: THREE.DoubleSide }));
+    cloth.position.set(0, 2.02, 0.07);
+    group.add(cloth);
+    const trim = new THREE.Mesh(new THREE.PlaneGeometry(0.56, 0.06), gold);
+    trim.position.set(0, 1.46, 0.075);
+    group.add(trim);
+    const emblem = buildEmblem(token.emblem, accentMat(0xc8aa6e, 1.3));
+    emblem.scale.setScalar(0.34);
+    emblem.position.set(0, 1.86, 0.1);
+    group.add(emblem);
+    shadowsOn(group);
+    scene.add(group);
+    popIn(group, 1);
+    return group;
+}
+
+function buildCrane(group, anim) {
+    const dark = kitMaterial('metalDark');
+    const gold = kitMaterial('metalRed');
+    const mast = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.9, 0.08), dark);
+    mast.position.set(1.15, 1.1, -0.45);
+    group.add(mast);
+    const pivot = new THREE.Group();
+    pivot.position.set(1.15, 2.05, -0.45);
+    group.add(pivot);
+    const jib = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.07, 0.07), gold);
+    jib.position.x = -0.45;
+    pivot.add(jib);
+    const counter = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.16), dark);
+    counter.position.x = 0.28;
+    pivot.add(counter);
+    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.6, 4), dark);
+    cable.position.set(-1.05, -0.3, 0);
+    pivot.add(cable);
+    const hook = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.12), gold);
+    hook.position.set(-1.05, -0.62, 0);
+    pivot.add(hook);
+    let t = 0;
+    anim.push((delta) => {
+        t += delta;
+        pivot.rotation.y = Math.sin(t * 0.35) * 0.9;
+    });
+}
+
+function buildForge(group, anim) {
+    const fire = accentMat(0xff7a2a, 1.6);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.92, 0.04, 8, 48), fire);
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.2;
+    group.add(ring);
+    const brazier = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.14, 0.26, 10), kitMaterial('metalDark'));
+    brazier.position.set(0.95, 0.28, 0.45);
+    group.add(brazier);
+    const embers = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), fire);
+    embers.position.set(0.95, 0.41, 0.45);
+    group.add(embers);
+    const light = new THREE.PointLight(0xff7a2a, 2.5, 3.5);
+    light.position.set(0.95, 0.8, 0.45);
+    group.add(light);
+    let t = 0;
+    anim.push((delta) => {
+        t += delta;
+        fire.emissiveIntensity = 1.4 + Math.sin(t * 3.1) * 0.35 + Math.sin(t * 7.3) * 0.15;
+        light.intensity = 2.2 + Math.sin(t * 3.1) * 0.6;
+    });
+}
+
+function buildListening(group, anim) {
+    addKit(group, 'satelliteDish_large', { x: -1.0, y: 0.15, z: 0.35, s: 0.75, ry: Math.PI / 2 });
+    const blink = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), accentMat(0x0ac8b9, 2));
+    blink.position.set(-1.0, 1.25, 0.35);
+    group.add(blink);
+    let t = 0;
+    anim.push((delta) => {
+        t += delta;
+        blink.material.emissiveIntensity = (t % 1.6) < 0.25 ? 3 : 0.4;
+    });
+}
+
+const ACCESSORIES = {
+    lyon: { building: 'antenne', build: buildListening },
+    marseille: { building: 'usine', build: buildCrane },
+    turin: { building: 'caserne', build: buildForge }
+};
+
+function syncCityTokens(tokens) {
+    const list = tokens || [];
+    const want = new Map(list.map((t) => [t.id, t]));
+    banners.forEach((b, id) => {
+        const t = want.get(id);
+        if (t && t.kind === b.kind) return;
+        scene.remove(b.group);
+        disposeTree(b.group);
+        banners.delete(id);
+    });
+    list.forEach((t) => {
+        if (!banners.has(t.id)) banners.set(t.id, { kind: t.kind, group: makeBanner(t) });
+    });
+    Object.entries(ACCESSORIES).forEach(([cityId, acc]) => {
+        const entry = built.get(acc.building);
+        if (!entry) return;
+        const t = want.get(cityId);
+        const on = !!t && t.kind === 'take';
+        if (on && !entry.accessory) {
+            const g = new THREE.Group();
+            const anim = [];
+            acc.build(g, anim);
+            shadowsOn(g);
+            entry.group.add(g);
+            entry.accessory = { group: g, anim };
+            entry.animators.push(...anim);
+            popIn(g, 1);
+        } else if (!on && entry.accessory) {
+            entry.group.remove(entry.accessory.group);
+            disposeTree(entry.accessory.group);
+            entry.animators = entry.animators.filter((fn) => !entry.accessory.anim.includes(fn));
+            entry.accessory = null;
+        }
+    });
 }
 
 function stop() {

@@ -982,7 +982,7 @@ function reliefBudget() {
 }
 
 function reliefUnits() {
-    return generateForce(reliefBudget(), seedFor('relief') + state.seed + state.turn).map(u => ({...u, uid: 'm' + u.uid, side: 'player', relief: true}));
+    return generateForce(reliefBudget(), seedFor('relief') + state.seed + state.turn).map(u => ({...u, name: 'Milice marseillaise', uid: 'm' + u.uid, side: 'player', relief: true}));
 }
 
 function tallyCombat(sim, key) {
@@ -1079,6 +1079,7 @@ async function resolveCombat(c) {
         const armyHere = m.armyAt === c.node && !m.armyDest;
         const defUnits = defenseUnits(c.node);
         delete m.fortified[c.node];
+        if (defUnits.some(u => u.relief)) addLog('⚓ La flotte de Marseille débarque pour défendre Alpha-7', 'chapter');
         const hd = c.node === 'alpha7' ? activeEffects().homeDef : 0;
         if (hd && defUnits.length) {
             addLog('🧱 Défenses préparées : +' + hd + ' DEF', 'build');

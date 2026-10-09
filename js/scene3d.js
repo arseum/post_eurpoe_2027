@@ -20,6 +20,8 @@ const UNIT3D = {
     avatar: { tint: 0xb79be0, scale: 0.8 }
 };
 
+const RELIEF_TINT = 0x5fb37e;
+
 let modelGltf = null;
 let modelPromise = null;
 
@@ -218,7 +220,8 @@ function disposeUnits() {
     units.clear();
 }
 
-function colorFor(side, frontline) {
+function colorFor(side, frontline, relief) {
+    if (relief) return RELIEF_TINT;
     if (side === 'player') return frontline ? 0x4fb3b0 : 0x6fd6cf;
     return frontline ? 0xb5483c : 0xc87a3c;
 }
@@ -249,7 +252,8 @@ function placeUnits(list, side) {
 }
 
 function createModelUnit(u, side, x, z) {
-    const cfg = UNIT3D[u.id] || { tint: side === 'player' ? 0x4fb3b0 : 0xb5483c, scale: 0.6 };
+    const base = UNIT3D[u.id] || { tint: side === 'player' ? 0x4fb3b0 : 0xb5483c, scale: 0.6 };
+    const cfg = u.relief ? { ...base, tint: RELIEF_TINT } : base;
     const group = new THREE.Group();
     group.position.set(x, 0, z);
     group.rotation.y = side === 'player' ? Math.PI / 2 : -Math.PI / 2;
@@ -266,10 +270,10 @@ function createModelUnit(u, side, x, z) {
     });
     group.add(inst);
 
-    if (u.hero) {
+    if (u.hero || u.relief) {
         const ring = new THREE.Mesh(
             new THREE.TorusGeometry(0.62, 0.035, 8, 32),
-            new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.3, emissive: new THREE.Color(0xfacc15), emissiveIntensity: 1.2 })
+            new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.4, metalness: 0.3, emissive: new THREE.Color(u.hero ? 0xfacc15 : RELIEF_TINT), emissiveIntensity: 1.2 })
         );
         ring.rotation.x = Math.PI / 2;
         ring.position.y = 0.05;
@@ -332,7 +336,7 @@ function createUnit(u, side, x, z) {
     group.position.set(x, 0, z);
     if (side === 'enemy') group.rotation.y = Math.PI;
 
-    const color = colorFor(side, u.frontline);
+    const color = colorFor(side, u.frontline, u.relief);
     const mat = new THREE.MeshStandardMaterial({
         color,
         roughness: 0.55,
