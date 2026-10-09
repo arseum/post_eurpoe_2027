@@ -22,6 +22,7 @@ node tools/sim/run.js --bot conquete --aim hegemon      # force un objectif de f
   - Chaque partie fait varier légèrement le bot (seuil d'assaut, tour d'offensive, ordre de construction) et ses choix d'événements, d'où une distribution de résultats.
 - `moyen` : joueur humain correct mais imparfait (estimation grossière Σ PV × Σ ATK, risques, oublis de garnison, événements au hasard pondéré).
   - Objectifs de fin par partie (`aims`, forçables avec `--aim`) : conquete → bastion/hégémon/singularité, diplomatie → pax/europe/singularité, tortue → europe/bastion/pax.
-- `run.js` : boucle de partie et rapport (victoires, fins, causes de défaite, tours moyens, courbes de ressources aux tours 5/10/15/20/30, % de tours au plafond, combats, premiers tours de menace/alliance/conquête, armée).
+- Préférences par cité (`cityPrefs` : `ally` ou `take`) : tortue s'allie à Lyon et Marseille et vise Turin ; le moyen tire une préférence par cité à chaque partie.
+- `run.js` : boucle de partie et rapport (premier statut de chaque cité, prise ou alliance, victoires, fins, causes de défaite, tours moyens, courbes de ressources aux tours 5/10/15/20/30, % de tours au plafond, combats, premiers tours de menace/alliance/conquête, armée).
 
 Si une évolution du jeu casse un bot, l'erreur est comptée et affichée (`ERREURS dans N parties`) sans arrêter la série.

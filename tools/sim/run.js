@@ -45,7 +45,7 @@ async function playGame(bot, seed, maxTurns, aim, difficulty) {
         seed, aim: Q.aim, outcome: 'timeout', ending: null, endingsAvailable: [], defeat: null, endTurn: null,
         snapshots: {}, capTurns: Object.fromEntries(RES_KEYS.map(k => [k, 0])), turns: 0,
         firstThreat: null, firstThreatNode: null, firstHomeThreat: null, upkeep: {}, firstAlliance: null, firstConquest: null,
-        armySizes: {}, maxArmy: 0, events: [], errors: []
+        armySizes: {}, maxArmy: 0, events: [], errors: [], cities: {}
     };
     game.G.newGame(difficulty);
     const meta = game.D('RES_META') || {};
@@ -81,6 +81,7 @@ async function playGame(bot, seed, maxTurns, aim, difficulty) {
         if (game.sim.result) break;
         rec.maxArmy = Math.max(rec.maxArmy, game.G.getArmySize());
         if (rec.firstAlliance === null && Object.keys(s.map.allied).length) rec.firstAlliance = s.turn;
+        for (const id of ['lyon', 'marseille', 'turin']) if (!rec.cities[id]) rec.cities[id] = s.map.owner[id] === 'player' ? 'take' : s.map.allied[id] ? 'ally' : null;
         if (rec.firstConquest === null && Object.entries(s.map.owner).some(([k, v]) => k !== 'alpha7' && v === 'player')) rec.firstConquest = s.turn;
         try {
             await game.G.endTurn();
@@ -193,6 +194,7 @@ function summarize(name, recs) {
             buildings: r1(mean(recs.map(r => r.final.buildings))),
             research: r1(mean(recs.map(r => r.final.research)))
         },
+        cities: Object.fromEntries(['lyon', 'marseille', 'turin'].map(id => [id, {take: recs.filter(r => r.cities[id] === 'take').length, ally: recs.filter(r => r.cities[id] === 'ally').length}])),
         errors: recs.flatMap(r => r.errors).slice(0, 5),
         errorGames: recs.filter(r => r.errors.length).length
     };
@@ -218,6 +220,7 @@ function textReport(sums, opts, ms) {
         L.push('Combats : assauts ' + s.combat.assaultWon + 'V/' + s.combat.assaultLost + 'D · défenses ' + s.combat.defenseWon + 'V/' + s.combat.defenseLost + 'D (dont ' + s.combat.undefended + ' sans défenseur) · alliés ' + s.combat.alliedHeld + ' tenus/' + s.combat.alliedLost + ' tombés');
         L.push('Première menace : tours ' + fmtObj(s.firstThreatTurns) + ' · sur Alpha-7 ' + s.firstThreatOnHome + '%');
         L.push('Premier tour : menace ' + s.firstThreat.mean + ' · menace Alpha-7 ' + s.firstHomeThreat.mean + ' (' + s.firstHomeThreat.share + '%) · alliance ' + (s.firstAlliance.mean ?? '—') + ' (' + s.firstAlliance.share + '%) · conquête ' + (s.firstConquest.mean ?? '—') + ' (' + s.firstConquest.share + '%)');
+        L.push('Cités (premier statut, prise/alliance) : ' + Object.entries(s.cities).map(([id, v]) => id + ' ' + v.take + '/' + v.ally).join(' · '));
         L.push('Armée max (taille) ' + s.maxArmy + ' · fin : ' + s.final.owned + ' territoires, ' + s.final.allied + ' alliés, ' + s.final.lost + ' perdus, garnison Alpha-7 ' + s.final.garrisonHome + ', ' + s.final.buildings + ' bât., ' + s.final.research + ' rech.');
         L.push('Ressources au plafond (% des tours) : ' + RES_KEYS.map(k => k + ' ' + s.capPct[k]).join(' · '));
         L.push('Tour   n    énergie  matér.  données  stab.  influ.  armée  entret.');

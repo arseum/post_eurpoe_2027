@@ -230,7 +230,7 @@ function costSum(cost) {
 function bestArmyUnit(c, room, reserve) {
     let best = null;
     for (const u of c.D('UNITS') || []) {
-        if (!c.canRecruit(u.id) || u.size > room || !c.afford(u.cost, reserve) || !c.upkeepOk(u.id, 15)) continue;
+        if (!c.canRecruit(u.id) || u.size > room || !c.afford(c.G.unitCost(u), reserve) || !c.upkeepOk(u.id, 15)) continue;
         const score = unitScore(u) / u.size;
         if (!best || score > best.score) best = {id: u.id, score, size: u.size};
     }
@@ -240,8 +240,8 @@ function bestArmyUnit(c, room, reserve) {
 function bestGarrisonUnit(c, reserve, horizon = 15) {
     let best = null;
     for (const u of c.D('UNITS') || []) {
-        if (!c.canRecruit(u.id) || !c.afford(u.cost, reserve) || !c.upkeepOk(u.id, horizon)) continue;
-        const score = unitScore(u) / Math.max(1, costSum(u.cost));
+        if (!c.canRecruit(u.id) || !c.afford(c.G.unitCost(u), reserve) || !c.upkeepOk(u.id, horizon)) continue;
+        const score = unitScore(u) / Math.max(1, costSum(c.G.unitCost(u)));
         if (!best || score > best.score) best = {id: u.id, score};
     }
     return best;
@@ -263,13 +263,13 @@ function affordableGarrison(c, reserve) {
         for (const u of c.D('UNITS') || []) {
             if (!c.canRecruit(u.id)) continue;
             let ok = true;
-            for (const [k, v] of Object.entries(u.cost)) if ((res[k] || 0) - v < (reserve[k] || 0)) ok = false;
+            for (const [k, v] of Object.entries(c.G.unitCost(u))) if ((res[k] || 0) - v < (reserve[k] || 0)) ok = false;
             if (!ok) continue;
-            const score = unitScore(u) / Math.max(1, costSum(u.cost));
+            const score = unitScore(u) / Math.max(1, costSum(c.G.unitCost(u)));
             if (!best || score > best.score) best = {u, score};
         }
         if (!best) break;
-        for (const [k, v] of Object.entries(best.u.cost)) res[k] -= v;
+        for (const [k, v] of Object.entries(c.G.unitCost(best.u))) res[k] -= v;
         ids.push(best.u.id);
     }
     return ids;
@@ -478,12 +478,20 @@ function fillGarrison(c, P) {
     }
 }
 
+function wantsAlly(P, id) {
+    return P.ally && (P.cityPrefs || {})[id] === 'ally';
+}
+
+function wantsTake(P, id) {
+    return P.conquerCities && (P.cityPrefs || {})[id] === 'take';
+}
+
 function nodeValue(c, P, id) {
     const n = c.node(id), m = c.m;
     if (!n) return 0;
     if (n.type === 'capital') return P.values.capital;
     if (n.type === 'city' && m.fallenAllies[id]) return P.ally ? 7 : P.conquerCities ? P.values.city : 0;
-    if (n.type === 'city') return P.conquerCities ? P.values.city : 0;
+    if (n.type === 'city') return P.conquerCities && !wantsAlly(P, id) ? P.values.city : 0;
     let v = P.values[n.type] || 0;
     if (n.cache && !m.cacheLooted[id]) v += P.values.cache;
     if (n.weakensCapital && !m.weakenedBy[id]) v += P.values.weaken;
@@ -529,7 +537,7 @@ function campaign(c, P, plan) {
 function diplomacy(c, P, plan) {
     if (!P.ally) return;
     const s = c.s, m = c.m;
-    const cities = c.nodes().filter(n => n.type === 'city' && m.owner[n.id] === 'neutral' && !m.allied[n.id]).sort((a, b) => a.allyCost - b.allyCost);
+    const cities = c.nodes().filter(n => n.type === 'city' && m.owner[n.id] === 'neutral' && !m.allied[n.id] && !wantsTake(P, n.id)).sort((a, b) => (b.id === 'lyon') - (a.id === 'lyon') || a.allyCost - b.allyCost);
     for (const n of cities) {
         if (c.cmd() <= 0) break;
         if ((s.resources.influence || 0) >= c.G.getAllyCost(n)) c.G.allyCity(n.id);
@@ -695,7 +703,7 @@ function humanPick(c, room, careless) {
     let best = null;
     const net = c.netEnergy(), rate = c.bal('upkeepEnergyPerSize') || 0;
     for (const u of c.D('UNITS') || []) {
-        if (!c.canRecruit(u.id) || u.size > room || !c.afford(u.cost, {}, true)) continue;
+        if (!c.canRecruit(u.id) || u.size > room || !c.afford(c.G.unitCost(u), {}, true)) continue;
         const after = c.s.resources.energy - (u.cost.energy || 0);
         if (!careless && (after + Math.min(0, net) < 8 || (net - u.size * rate < 0 && after < 40))) continue;
         const score = (u.hp + u.atk * 3) / u.size;
@@ -776,7 +784,8 @@ function medCampaign(c, Q) {
     for (const n of c.nodes()) {
         if (c.friendly(n.id)) continue;
         const fallen = m.fallenAllies[n.id];
-        if (n.type === 'city' && !Q.conquerCities && !(fallen && Q.ally)) continue;
+        if (n.type === 'city' && !fallen && (!Q.conquerCities || wantsAlly(Q, n.id))) continue;
+        if (n.type === 'city' && fallen && !Q.ally && !Q.conquerCities) continue;
         if (n.type === 'capital' && s.turn < Q.berlinFrom) continue;
         const ap = c.approach(m.armyAt, n.id);
         if (!ap) continue;
@@ -843,6 +852,7 @@ function makeMedium(P) {
             q.conquerCities = rng() < 0.4;
             q.ally = rng() < 0.7;
             q.takeExode = rng() < 0.5;
+            q.cityPrefs = Object.fromEntries(['lyon', 'marseille', 'turin'].map(id => [id, rng() < 0.5 ? 'ally' : 'take']));
             q.influenceTaste = q.ally ? 1.5 : 0.5;
             q.econ = P.econ.slice();
             for (let i = 0; i < q.econ.length - 1; i++) if (rng() < 0.3) [q.econ[i], q.econ[i + 1]] = [q.econ[i + 1], q.econ[i]];
@@ -862,7 +872,7 @@ function makeMedium(P) {
                 }
             }
             medDefend(c, Q);
-            if (Q.ally) for (const n of c.nodes().filter(x => x.type === 'city' && c.m.owner[x.id] === 'neutral' && !c.m.allied[x.id])) {
+            if (Q.ally) for (const n of c.nodes().filter(x => x.type === 'city' && c.m.owner[x.id] === 'neutral' && !c.m.allied[x.id] && !wantsTake(Q, x.id))) {
                 if (c.cmd() > 0 && c.s.resources.influence >= c.G.getAllyCost(n) && c.rng() < 0.8) c.G.allyCity(n.id);
             }
             medEcon(c, Q, 1);
@@ -880,7 +890,7 @@ function makeMedium(P) {
             const rich = c.s.resources.materials > 120 && c.s.resources.energy > 60 && c.netEnergy() > 2;
             if (c.s.turn >= 8 && (rich || c.garrison('alpha7').length < Math.floor(c.s.turn / Q.homeGarrisonEvery)) && c.rng() > Q.forgetHome) {
                 const u = humanPick(c, 99);
-                if (u && c.afford(c.unit(u.id).cost, {energy: 15, materials: 10})) recruitTo(c, u.id);
+                if (u && c.afford(c.G.unitCost(c.unit(u.id)), {energy: 15, materials: 10})) recruitTo(c, u.id);
             }
             medEcon(c, Q, 0);
         },
@@ -961,6 +971,7 @@ const BOTS = {
         attackFrom: 18,
         conquerCities: true,
         ally: true,
+        cityPrefs: {lyon: 'ally', marseille: 'ally', turin: 'take'},
         econCmd: 3,
         campaignFirst: false,
         defMargin: 0.4,

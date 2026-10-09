@@ -425,7 +425,8 @@ function armyBody() {
             h += `<button class="recruit" disabled data-tt="${esc('Requiert : ' + (b ? b.name : '?'))}"><span class="r-top"><span class="crest">${ic(ICONS.unit[u.id])}</span><span class="r-name">${esc(u.name)}</span></span><span class="req">${ic('lock-simple')}${esc(b ? b.name : '?')}</span></button>`;
             return;
         }
-        h += `<button class="recruit" ${canAfford(u.cost) ? '' : 'disabled'} data-tt="${unitTtData(u)}" onclick="recruitUnit('${u.id}')"><span class="r-top"><span class="crest">${ic(ICONS.unit[u.id])}</span><span class="r-name">${esc(u.name)}${u.size > 1 ? ' ×' + u.size : ''}</span></span><span class="r-foot">${costHtml(u.cost)}<span class="r-plus">${ic('plus-circle')}</span></span></button>`;
+        const cost = unitCost(u);
+        h += `<button class="recruit" ${canAfford(cost) ? '' : 'disabled'} data-tt="${unitTtData(u)}" onclick="recruitUnit('${u.id}')"><span class="r-top"><span class="crest">${ic(ICONS.unit[u.id])}</span><span class="r-name">${esc(u.name)}${u.size > 1 ? ' ×' + u.size : ''}</span></span><span class="r-foot">${costHtml(cost)}<span class="r-plus">${ic('plus-circle')}</span></span></button>`;
     });
     return h + '</div>';
 }
@@ -469,8 +470,9 @@ function renderNodePanel() {
     const st = nodeStatus(id);
     const owned = st === 'player', allied = st === 'allied';
     let body = `<p class="np-desc">${esc(node.desc)}</p><div class="np-facts">`;
-    if ((owned || allied) && node.prod && Object.keys(node.prod).length) {
-        body += `<div class="fact">${ic('coins')}<span class="fact-l">Rapporte chaque tour</span>${fxHtml(node.prod)}</div>`;
+    const prod = nodeProd(node);
+    if ((owned || allied) && Object.keys(prod).length) {
+        body += `<div class="fact">${ic('coins')}<span class="fact-l">Rapporte chaque tour</span>${fxHtml(prod)}</div>`;
     }
     if (node.cache && !m.cacheLooted[id] && !owned) {
         body += `<div class="fact">${ic('package')}<span class="fact-l">Cache à piller</span>${fxHtml(node.cache)}</div>`;

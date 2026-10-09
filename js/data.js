@@ -71,7 +71,9 @@ const BALANCE = {
     exodeTurn: 22,
     exodeTitanLevel: 2,
     exodeEnergy: 100,
-    upkeepEnergyPerSize: 0.5
+    upkeepEnergyPerSize: 0.5,
+    reliefBase: 6,
+    reliefSlope: 0.6
 };
 
 const BALANCE_BASE = {...BALANCE};
@@ -428,7 +430,7 @@ const EVENTS = [
         requires: s => s.map.owner.lyon === 'neutral' && !s.map.allied.lyon,
         echoes: [{if: s => s.flags.sommetPropose, text: "Les délégués lyonnais rappellent qu'ils étaient au sommet d'Alpha-7."}],
         choices: [
-            {text: "Accepter l'alliance", effects: {materials: -8, data: 5}, flags: {allianceLyon: true}, ally: 'lyon', hint: 'Lyon devient votre alliée : +4💾 +2🌐 par tour'},
+            {text: "Accepter l'alliance", effects: {materials: -8, data: 5}, flags: {allianceLyon: true}, ally: 'lyon', hint: 'Lyon devient votre alliée : +4💾 +1🌐 par tour, autres alliances −4🌐'},
             {text: 'Négocier mieux', effects: {influence: -4, data: 8}, flags: {allianceLyon: true}, ally: 'lyon', requires: s => s.resources.influence >= 8, hint: 'Lyon devient votre alliée, sans tribut matériel'},
             {text: 'Décliner', effects: {stability: 2}, flags: {}, hint: "Lyon reste neutre ; l'alliance coûtera de l'influence plus tard"}
         ]
@@ -754,13 +756,23 @@ const MAP_NODES = [
     {
         id: 'lyon', name: 'Lyon', icon: '🏙️', type: 'city', tier: 1,
         geo: {lon: 4.84, lat: 45.76}, pos: {x: 46, y: 50}, links: [{to: 'alpha7', turns: 2}, {to: 'outpost', turns: 3}, {to: 'turin', turns: 2}, {to: 'nexus', turns: 3}],
-        prod: {data: 4, influence: 2}, garrisonBudget: 14, allyCost: 15, unlocksChapter: 2,
+        garrisonBudget: 14, allyCost: 15, unlocksChapter: 2,
+        identity: {
+            title: 'La Bourse du Rhône', emblem: 'scales',
+            conquest: {name: "Le Réseau d'écoute", desc: 'préavis des menaces +1 tour', prod: {data: 5, influence: 1}, effect: {threatWarning: 1}},
+            alliance: {name: 'La Ligue marchande', desc: 'autres alliances −4🌐', prod: {data: 4, influence: 1}, effect: {allyDiscount: 4}}
+        },
         desc: 'Cité-État marchande, ses réseaux de données irriguent le Rhône. Alliable ou prenable.'
     },
     {
         id: 'marseille', name: 'Marseille', icon: '⚓', type: 'city', tier: 1,
         geo: {lon: 5.37, lat: 43.3}, pos: {x: 52, y: 74}, links: [{to: 'alpha7', turns: 2}, {to: 'ruine', turns: 2}, {to: 'turin', turns: 3}],
-        prod: {materials: 5, energy: 2}, garrisonBudget: 16, allyCost: 20, unlocksChapter: 2,
+        garrisonBudget: 16, allyCost: 20, unlocksChapter: 2,
+        identity: {
+            title: 'Le Port-Forge', emblem: 'anchor',
+            conquest: {name: "L'Arsenal phocéen", desc: 'unités −1🔩', prod: {materials: 5, energy: 2}, effect: {unitDiscount: 1}},
+            alliance: {name: 'La Flotte de secours', desc: 'une milice marseillaise défend Alpha-7 attaquée', prod: {materials: 3, energy: 2}, effect: {homeRelief: 1}}
+        },
         desc: 'Port fortifié, fonderies et panneaux solaires. Fière, elle se défend durement.'
     },
     {
@@ -785,7 +797,12 @@ const MAP_NODES = [
         id: 'turin', name: 'Turin', icon: '🏭', type: 'city', tier: 1,
         geo: {lon: 7.68, lat: 45.07}, pos: {x: 38, y: 66},
         links: [{to: 'alpha7', turns: 2}, {to: 'lyon', turns: 2}, {to: 'marseille', turns: 3}],
-        prod: {materials: 4, energy: 3}, garrisonBudget: 15, allyCost: 18,
+        garrisonBudget: 15, allyCost: 18,
+        identity: {
+            title: 'La Cité-forge', emblem: 'anvil',
+            conquest: {name: 'Les Forges alpines', desc: '+4 PV pour toutes les unités', prod: {materials: 4, energy: 3}, effect: {hpBonus: 4}},
+            alliance: {name: 'Le Contingent alpin', desc: '+1 armée max et 2 Sentinelles offertes', prod: {materials: 2, energy: 3}, effect: {armyCap: 1, gift: ['sentinelle', 'sentinelle']}}
+        },
         desc: 'Cité-forge des Alpes, ses hauts-fourneaux crachent l\'acier jour et nuit. Fière de son indépendance — à rallier ou à soumettre.'
     },
     {

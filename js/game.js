@@ -17,7 +17,8 @@ function makeMap() {
         berlinWeakened: 0,
         transferTurn: 0,
         raided: {},
-        fallenAllies: {}
+        fallenAllies: {},
+        gifted: {}
     };
 }
 
@@ -105,6 +106,7 @@ function loadSave() {
         }
         if (!state.map.raided) state.map.raided = {};
         if (!state.map.fallenAllies) state.map.fallenAllies = {};
+        if (!state.map.gifted) state.map.gifted = {};
         return true;
     } catch (e) {
         return false;
@@ -135,6 +137,18 @@ function getUnit(id) {
 
 function isHeld(id, s = state) {
     return s.map.owner[id] === 'player' || !!s.map.allied[id];
+}
+
+function cityDividend(node, s = state) {
+    if (!node.identity) return null;
+    if (s.map.owner[node.id] === 'player') return node.identity.conquest;
+    if (s.map.allied[node.id]) return node.identity.alliance;
+    return null;
+}
+
+function nodeProd(node, s = state) {
+    const d = cityDividend(node, s);
+    return d ? d.prod : node.prod || {};
 }
 
 function linkTurns(a, b) {
@@ -325,16 +339,20 @@ function addEffect(agg, e) {
         agg.mods.atk += e.mods.atk || 0;
         agg.mods.def += e.mods.def || 0;
     }
-    for (const k of ['armyCap', 'hpBonus', 'command', 'threatWarning', 'heroSlot', 'allyDiscount', 'homeDef', 'capitalWeaken', 'alliedHold']) agg[k] += e[k] || 0;
+    for (const k of ['armyCap', 'hpBonus', 'command', 'threatWarning', 'heroSlot', 'allyDiscount', 'homeDef', 'capitalWeaken', 'alliedHold', 'unitDiscount', 'homeRelief']) agg[k] += e[k] || 0;
 }
 
 function activeEffects() {
-    const agg = {prod: {}, mods: {atk: 0, def: 0}, armyCap: 0, hpBonus: 0, command: 0, threatWarning: 0, heroSlot: 0, allyDiscount: 0, homeDef: 0, capitalWeaken: 0, alliedHold: 0};
+    const agg = {prod: {}, mods: {atk: 0, def: 0}, armyCap: 0, hpBonus: 0, command: 0, threatWarning: 0, heroSlot: 0, allyDiscount: 0, homeDef: 0, capitalWeaken: 0, alliedHold: 0, unitDiscount: 0, homeRelief: 0};
     for (const rid of state.research) {
         const r = RESEARCH.find(x => x.id === rid);
         if (r) addEffect(agg, r.effect);
     }
     for (const [f, on] of Object.entries(state.flags)) if (on && DECISIONS[f] && DECISIONS[f].effect) addEffect(agg, DECISIONS[f].effect);
+    for (const node of MAP_NODES) {
+        const d = cityDividend(node);
+        if (d && d.effect) addEffect(agg, d.effect);
+    }
     return agg;
 }
 
@@ -713,13 +731,21 @@ function buildBuilding(id) {
     render();
 }
 
+function unitCost(u) {
+    const off = activeEffects().unitDiscount;
+    if (!off || !u.cost.materials) return u.cost;
+    return {...u.cost, materials: Math.max(1, u.cost.materials - off)};
+}
+
 function recruitUnit(id) {
     const u = getUnit(id);
-    if (!u || !canAfford(u.cost)) return;
+    if (!u) return;
+    const cost = unitCost(u);
+    if (!canAfford(cost)) return;
     if (!u.always && u.building && !isBuilt(u.building)) return;
     const atHome = state.map.armyAt === 'alpha7' && !state.map.armyDest;
     const toArmy = atHome && getArmySize() + u.size <= getArmyCap();
-    for (const [k, v] of Object.entries(u.cost)) state.resources[k] -= v;
+    for (const [k, v] of Object.entries(cost)) state.resources[k] -= v;
     state.stats.recruited++;
     if (toArmy) {
         state.army.push(id);
@@ -821,11 +847,28 @@ function allyCity(id) {
     if ((state.resources.influence || 0) < cost) return;
     if (!spendCommand(1)) return;
     state.resources.influence -= cost;
-    m.allied[id] = true;
-    addLog('🤝 Alliance scellée avec ' + node.name, 'chapter');
-    sfx('alliance');
+    sealAlliance(id);
     save();
     render();
+}
+
+function sealAlliance(id, msg) {
+    const m = state.map;
+    const node = getNode(id);
+    m.allied[id] = true;
+    addLog(msg || '🤝 Alliance scellée avec ' + node.name, 'chapter');
+    const d = cityDividend(node);
+    if (d) addLog('↳ ' + d.name + ' : ' + d.desc, 'chapter');
+    if (d && d.effect && d.effect.gift && !m.gifted[id]) {
+        m.gifted[id] = true;
+        const atHome = m.armyAt === 'alpha7' && !m.armyDest;
+        for (const uid of d.effect.gift) {
+            if (atHome && getArmySize() + getUnit(uid).size <= getArmyCap()) state.army.push(uid);
+            else m.garrisons.alpha7.push(uid);
+        }
+        addLog('🎁 ' + node.name + ' envoie ' + d.effect.gift.map(u => getUnit(u).name).join(', '), 'build');
+    }
+    sfx('alliance');
     pulseNode(id, 'allied');
 }
 
@@ -902,7 +945,7 @@ function getCampaignProduction() {
     for (const node of MAP_NODES) {
         if (node.id === 'alpha7') continue;
         if (isHeld(node.id)) {
-            for (const [k, v] of Object.entries(node.prod)) p[k] += v;
+            for (const [k, v] of Object.entries(nodeProd(node))) p[k] += v;
         }
     }
     p.energy -= getUpkeep();
@@ -930,7 +973,16 @@ function defenseUnits(nodeId) {
     if (m.armyAt === nodeId && !m.armyDest) units = units.concat(buildUnitsFrom(state.army, 'a')).concat(buildHeroUnits());
     const bonus = (m.fortified[nodeId] ? BALANCE.fortifyDef : 0) + (nodeId === 'alpha7' ? activeEffects().homeDef : 0);
     units.forEach(u => u.def += bonus);
+    if (nodeId === 'alpha7' && activeEffects().homeRelief) units = units.concat(reliefUnits());
     return units;
+}
+
+function reliefBudget() {
+    return BALANCE.reliefBase + Math.round(state.turn * BALANCE.reliefSlope);
+}
+
+function reliefUnits() {
+    return generateForce(reliefBudget(), seedFor('relief') + state.seed + state.turn).map(u => ({...u, uid: 'm' + u.uid, side: 'player', relief: true}));
 }
 
 function tallyCombat(sim, key) {
@@ -963,10 +1015,9 @@ async function resolveCombat(c) {
         tallyCombat(sim, sim.won ? 'assaultsWon' : sim.retreated ? 'retreats' : 'assaultsLost');
         if (sim.won && m.fallenAllies[c.node]) {
             m.owner[c.node] = 'neutral';
-            m.allied[c.node] = true;
             delete m.fallenAllies[c.node];
             state.army = survivorsOf(sim, 'a');
-            addLog('🕊️ ' + node.name + ' est libérée et redevient votre alliée', 'chapter');
+            sealAlliance(c.node, '🕊️ ' + node.name + ' est libérée et redevient votre alliée');
         } else if (sim.won) {
             m.owner[c.node] = 'player';
             state.army = survivorsOf(sim, 'a');
@@ -1301,12 +1352,7 @@ function onEvtChoice(i) {
     addLog('► ' + c.text, 'event');
     if (c.effects) for (const [k, v] of Object.entries(c.effects)) state.resources[k] += v;
     if (c.flags) Object.assign(state.flags, c.flags);
-    if (c.ally && state.map.owner[c.ally] === 'neutral' && !state.map.allied[c.ally]) {
-        state.map.allied[c.ally] = true;
-        addLog('🤝 Alliance scellée avec ' + getNode(c.ally).name, 'chapter');
-        sfx('alliance');
-        pulseNode(c.ally, 'allied');
-    }
+    if (c.ally && state.map.owner[c.ally] === 'neutral' && !state.map.allied[c.ally]) sealAlliance(c.ally);
     if (c.hint) addLog('↳ ' + c.hint, 'chapter');
     clampRes();
     ov.classList.remove('active');

@@ -148,3 +148,12 @@ Experts 88/90/90 %, moyen 44 %, les 6 fins obtenues sur 50 parties, victoire typ
 - [x] Emplacement vide : ouvre le tiroir de construction ; Échap et ✕ ferment le panneau
 - [x] Tests Chrome : survol, clic, amélioration, cœur, vide, glisser, Échap ; non-régression carte et combats
 - [x] Entrer dans la base n'ouvre plus le tiroir Dôme (écran allégé) ; guide adapté : « Entrez dans Alpha-7 » puis « cliquez sur un emplacement libre » — testé de bout en bout
+
+## Identité des cités (spec : `tasks/spec-identite-cites.md`, 2026-10-09)
+
+- [x] Spécification rédigée
+- [x] Validation de la spec par l'utilisateur
+- [x] Étape 1 : `identity` dans `MAP_NODES`, `cityDividend`, `sealAlliance`, `unitCost`, milice de Marseille, harnais (iso-résultat puis réglage)
+- [ ] Étape 2 : panneau de colonie (cartes Prendre / S'allier), infobulles, toasts, guide
+- [ ] Étape 3 : 3D (emblèmes carte, étendards et accessoires base, milice en combat : teinte alliée, aujourd'hui des Pillards rouges)
+- [ ] Étape 4 : tests Chrome, revue, README / ROADMAP / mémoire
