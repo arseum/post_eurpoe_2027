@@ -770,7 +770,7 @@ const GLOSSARY = {
 const MAP_NODES = [
     {
         id: 'alpha7', name: 'Alpha-7', icon: '◆', type: 'home', tier: 0,
-        geo: {lon: 6.45, lat: 45.55}, pos: {x: 50, y: 62}, links: [{to: 'lyon', turns: 2}, {to: 'marseille', turns: 2}, {to: 'ruine', turns: 3}, {to: 'turin', turns: 2}],
+        geo: {lon: 6.45, lat: 45.55}, pos: {x: 50, y: 62}, links: [{to: 'lyon', turns: 2}, {to: 'marseille', turns: 2}, {to: 'ruine', turns: 3}, {to: 'turin', turns: 2}, {to: 'grenoble', turns: 1}],
         prod: {},
         garrisonBudget: 0,
         desc: 'Le dôme. Dernier bastion vivant sous les Alpes. Sa chute est la fin.'
@@ -826,6 +826,13 @@ const MAP_NODES = [
             alliance: {name: 'Le Contingent alpin', desc: '+1 armée max et 2 Sentinelles offertes', help: "À la signature, 2 Sentinelles rejoignent l'armée, ou la garnison d'Alpha-7 si l'armée est absente ou pleine. L'armée gagne ensuite une place de plus.", prod: {materials: 2, energy: 3}, effect: {armyCap: 1, gift: ['sentinelle', 'sentinelle']}}
         },
         desc: 'Cité-forge des Alpes, ses hauts-fourneaux crachent l\'acier jour et nuit. Fière de son indépendance — à rallier ou à soumettre.'
+    },
+    {
+        id: 'grenoble', name: 'Ruines de Grenoble', icon: '🏚️', type: 'ruin', tier: 1,
+        geo: {lon: 5.72, lat: 45.19}, pos: {x: 44, y: 66},
+        links: [{to: 'alpha7', turns: 1}],
+        prod: {}, garrisonBudget: 5, cache: {materials: 20, data: 10, energy: 10}, minor: true,
+        desc: 'Faubourgs effondrés au pied du Vercors, fouillés par quelques automates errants. Une cible facile pour une première sortie.'
     },
     {
         id: 'zurich', name: 'Ruines de Zurich', icon: '🏦', type: 'ruin', tier: 2,

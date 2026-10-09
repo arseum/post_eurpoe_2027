@@ -393,7 +393,7 @@ function holdCity(c) {
 }
 
 function guardHomeWhileAway(c, P) {
-    if (c.armyHome()) return;
+    if (c.armyHome() || c.s.turn <= 2) return;
     const budget = c.projectedThreatBudget(P.homeLookahead);
     const seed = c.projectedThreatSeed(P.homeLookahead);
     let guard = 0;
@@ -488,7 +488,7 @@ function wantsTake(P, id) {
 
 function nodeValue(c, P, id) {
     const n = c.node(id), m = c.m;
-    if (!n) return 0;
+    if (!n || n.minor) return 0;
     if (n.type === 'capital') return P.values.capital;
     if (n.type === 'city' && m.fallenAllies[id]) return P.ally ? 7 : P.conquerCities ? P.values.city : 0;
     if (n.type === 'city') return P.conquerCities && !wantsAlly(P, id) ? P.values.city : 0;
@@ -498,8 +498,23 @@ function nodeValue(c, P, id) {
     return v;
 }
 
+function openingRaid(c) {
+    const s = c.s, m = c.m;
+    const at = c.node(m.armyAt);
+    if (at && at.minor && !m.armyDest && c.cmd() > 0) {
+        c.G.moveArmy('alpha7');
+        return true;
+    }
+    if (s.turn > 1 || m.armyDest || m.armyAt !== 'alpha7' || !s.army.length || c.cmd() <= 0) return false;
+    const n = c.nodes().find(x => x.minor && m.owner[x.id] === 'hostile' && c.G.linkTurns('alpha7', x.id) === 1);
+    if (!n) return false;
+    c.G.attackNode(n.id);
+    return true;
+}
+
 function campaign(c, P, plan) {
     const s = c.s, m = c.m;
+    if (!plan.moved && openingRaid(c)) plan.moved = true;
     if (plan.holdArmy || plan.moved || m.armyDest || !m.armyAt || c.cmd() <= 0) return;
     if (s.turn < P.attackFrom) return;
     if (!s.army.length) return;
@@ -776,6 +791,7 @@ function medHelpAllies(c, Q) {
 
 function medCampaign(c, Q) {
     const s = c.s, m = c.m;
+    if (openingRaid(c)) return;
     if (Q.hold || m.armyDest || !m.armyAt || c.cmd() <= 0 || !s.army.length || s.turn < Q.attackFrom) return;
     const atHome = m.armyAt === 'alpha7';
     if (atHome && m.threats.some(t => t.nodeId === 'alpha7' && t.arrivesIn <= 2) && c.rng() > Q.recklessness) return;
@@ -786,7 +802,7 @@ function medCampaign(c, Q) {
         const fallen = m.fallenAllies[n.id];
         if (n.type === 'city' && !fallen && (!Q.conquerCities || wantsAlly(Q, n.id))) continue;
         if (n.type === 'city' && fallen && !Q.ally && !Q.conquerCities) continue;
-        if (n.type === 'capital' && s.turn < Q.berlinFrom) continue;
+        if (n.minor || (n.type === 'capital' && s.turn < Q.berlinFrom)) continue;
         const ap = c.approach(m.armyAt, n.id);
         if (!ap) continue;
         const ratio = myP / Math.max(1, enemyRough(c, c.G.garrisonBudgetFor(n), c.G.garrisonSeed(n.id))) * (1 + (c.rng() - 0.5) * Q.misjudge);

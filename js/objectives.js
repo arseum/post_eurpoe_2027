@@ -1,6 +1,33 @@
 const OBJ_KEY = 'pe2147_obj_folded';
 const PRODUCTION_BUILDINGS = ['reacteur', 'usine', 'centreDonnees'];
 let berlinOddsCache = {key: null, win: 0};
+let targetCache = {key: null, best: null};
+
+function frontier() {
+    const m = state.map;
+    const ids = new Set();
+    for (const n of MAP_NODES) {
+        if (!isHeld(n.id) && m.armyAt !== n.id) continue;
+        n.links.forEach(l => ids.add(l.to));
+    }
+    return MAP_NODES.filter(n => ids.has(n.id) && n.type !== 'capital' && m.owner[n.id] !== 'player' && !m.allied[n.id]);
+}
+
+function bestTarget() {
+    if (!state.army.length) return null;
+    const key = [state.turn, state.army.join(','), state.heroes.join(','), JSON.stringify(state.map.owner), state.retreatAt].join('|');
+    if (targetCache.key === key) return targetCache.best;
+    let best = null;
+    const from = state.map.armyAt || 'alpha7';
+    for (const n of frontier()) {
+        const win = estimateBattle(assaultUnits(n.id, state.army), generateForce(garrisonBudgetFor(n), garrisonSeed(n.id)), 30, {retreatAt: state.retreatAt}).win;
+        const turns = linkTurns(from, n.id) || MAP_NODES.filter(x => isHeld(x.id) || x.id === 'alpha7').map(x => linkTurns(x.id, n.id)).filter(Boolean).sort((a, b) => a - b)[0] || 9;
+        const score = win - turns * 0.02;
+        if (win >= 0.5 && (!best || score > best.score)) best = {node: n, win, turns, score};
+    }
+    targetCache = {key, best};
+    return best;
+}
 
 function berlinOdds() {
     if (!state.army.length) return 0;
@@ -31,11 +58,26 @@ const OBJECTIVE_RULES = [
         text: 'Laisser une garnison à Alpha-7',
         help: 'Si Alpha-7 est attaquée sans défenseurs, la partie est perdue. Les recrues vont en garnison quand l\'armée est loin du dôme.'
     }] : [],
-    s => s.chapter === 1 ? [{
-        icon: 'flag-banner', go: `selectNode('lyon')`,
-        text: 'Tenir Lyon, Marseille ou le CERN',
-        help: 'Prendre ou rallier Lyon ou Marseille, ou reprendre les Ruines du CERN, ouvre le chapitre 2 : de nouveaux bâtiments et de nouvelles recherches.'
-    }] : [],
+    s => {
+        const dest = s.map.armyDest && s.map.owner[s.map.armyDest] !== 'player' && !s.map.allied[s.map.armyDest] ? getNode(s.map.armyDest) : null;
+        if (dest) return [{
+            icon: 'path', go: `selectNode('${dest.id}')`,
+            text: `Assaut en cours : ${dest.name} · ${s.map.armyEta > 1 ? s.map.armyEta + ' tours' : 'prochain tour'}`,
+            help: 'L\'armée marche vers sa cible. Le combat aura lieu à son arrivée, à la fin du tour.'
+        }];
+        if (s.map.armyDest) return [];
+        const t = bestTarget();
+        if (t) return [{
+            icon: 'sword', go: `selectNode('${t.node.id}')`,
+            text: `Attaquer ${t.node.name} · ${Math.round(t.win * 100)} % · ${t.turns} tour${t.turns > 1 ? 's' : ''}`,
+            help: 'La cible voisine la plus accessible pour votre armée actuelle, selon les estimations de PROMETHEUS.' + (t.node.unlocksChapter > state.chapter ? ' La tenir ouvre le chapitre ' + t.node.unlocksChapter + '.' : '')
+        }];
+        return state.chapter === 1 ? [{
+            icon: 'shield-plus', go: `toggleDrawer('army')`,
+            text: 'Renforcer l\'armée',
+            help: 'Aucune cible voisine ne dépasse 50 % de chances. Recrutez, bâtissez la Caserne ou étudiez. Lyon, Marseille ou le CERN ouvriront le chapitre 2.'
+        }] : [];
+    },
     () => researchTierDone() ? [{
         icon: 'atom', go: `setCenterView('base'); selectBase('core')`,
         text: `Éveiller le Cœur (niveau ${state.core + 1})`,
@@ -46,7 +88,7 @@ const OBJECTIVE_RULES = [
         text: `S'allier à ${n.name} (${getAllyCost(n)}🌐)`,
         help: 'Vous avez assez d\'influence pour une alliance. Comparez d\'abord les deux voies dans le panneau de la cité.'
     })),
-    s => s.chapter >= 2 && s.map.owner.outpost !== 'player' && s.map.owner.munich !== 'player' ? [{
+    s => s.chapter >= 2 && s.map.owner.outpost !== 'player' && s.map.owner.munich !== 'player' && !bestTarget() ? [{
         icon: 'scissors', go: `selectNode('outpost')`,
         text: 'Prendre un avant-poste',
         help: 'Strasbourg (−10) ou Munich (−6) : chaque avant-poste pris coupe le ravitaillement de Berlin et affaiblit sa garnison.'

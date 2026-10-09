@@ -15,3 +15,5 @@
 - Refactor du jeu : comparer le JSON de `tools/sim/run.js --json` avant/après (hors `elapsedMs`), le harnais est déterministe. Les animations de combat y sont neutralisées : les tester dans Chrome.
 - Les agents de revue se trompent parfois (`spendCommand` « sauvegarde deux fois » était faux) : vérifier chaque constat dans le code avant de corriger.
 - Sauvegarde : jamais pendant le traitement d'un tour (`endTurnBusy`) ni en combat, sinon un rechargement donne un tour à moitié appliqué (production doublée, partie bloquée en phase `battle`).
+
+- Ajouter un nœud ou une option de carte : mesurer au harnais sur 8 graines, et vérifier séparément l'effet du jeu et celui des bots. Un bot qui ignore le nœud donne la référence. Les bots réagissent mal aux nouveautés (cible rentable au mauvais moment, garde paniquée, armée bloquée dans un cul-de-sac). Leur faire jouer le coup enseigné au joueur avant de conclure sur l'équilibrage.

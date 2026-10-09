@@ -22,6 +22,7 @@ node tools/sim/run.js --bot conquete --aim hegemon      # force un objectif de f
   - Chaque partie fait varier légèrement le bot (seuil d'assaut, tour d'offensive, ordre de construction) et ses choix d'événements, d'où une distribution de résultats.
 - `moyen` : joueur humain correct mais imparfait (estimation grossière Σ PV × Σ ATK, risques, oublis de garnison, événements au hasard pondéré).
   - Objectifs de fin par partie (`aims`, forçables avec `--aim`) : conquete → bastion/hégémon/singularité, diplomatie → pax/europe/singularité, tortue → europe/bastion/pax.
+- Raid d'ouverture (`openingRaid`) : comme le tutoriel, assaut au tour 1 sur un nœud `minor` voisin (Ruines de Grenoble), retour à Alpha-7 au tour 2, puis le nœud est ignoré. La garde d'Alpha-7 ne se déclenche pas pendant ces deux tours.
 - Préférences par cité (`cityPrefs` : `ally` ou `take`) : tortue s'allie à Lyon et Marseille et vise Turin ; le moyen tire une préférence par cité à chaque partie.
 - `run.js` : boucle de partie et rapport (premier statut de chaque cité, prise ou alliance, victoires, fins, causes de défaite, tours moyens, courbes de ressources aux tours 5/10/15/20/30, % de tours au plafond, combats, premiers tours de menace/alliance/conquête, armée).
 

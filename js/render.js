@@ -656,11 +656,13 @@ function openAssault(id) {
     assaultPlan = {dest: id, leave: new Set()};
     renderAssault();
     openConfirm(null, closeAssault);
+    guideUpdate();
 }
 
 function closeAssault() {
     assaultPlan = null;
     closeConfirm();
+    guideUpdate();
 }
 
 function toggleEngage(i) {

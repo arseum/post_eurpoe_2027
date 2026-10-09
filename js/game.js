@@ -2,7 +2,7 @@ let state = null, battleState = null, battleSpeed = 1, pendingScreens = [], twIn
 
 function makeMap() {
     return {
-        owner: {alpha7: 'player', lyon: 'neutral', marseille: 'neutral', turin: 'neutral', ruine: 'hostile', zurich: 'hostile', outpost: 'hostile', munich: 'hostile', nexus: 'hostile', berlin: 'hostile'},
+        owner: {alpha7: 'player', lyon: 'neutral', marseille: 'neutral', turin: 'neutral', ruine: 'hostile', grenoble: 'hostile', zurich: 'hostile', outpost: 'hostile', munich: 'hostile', nexus: 'hostile', berlin: 'hostile'},
         weakenedBy: {},
         allied: {},
         garrisons: {alpha7: []},
@@ -1163,7 +1163,7 @@ function armyGuards(nodeId) {
 }
 
 function heldTerritories(s = state) {
-    return MAP_NODES.filter(n => n.id !== 'alpha7' && isHeld(n.id, s)).length;
+    return MAP_NODES.filter(n => n.id !== 'alpha7' && !n.minor && isHeld(n.id, s)).length;
 }
 
 function threatBudget(turn) {
@@ -1190,7 +1190,7 @@ function spawnThreats() {
     const targets = [];
     let total = 0;
     for (const node of MAP_NODES) {
-        const w = node.id === 'alpha7' ? BALANCE.threatHomeWeight : m.owner[node.id] === 'player' ? BALANCE.threatOwnedWeight : m.allied[node.id] ? BALANCE.threatAlliedWeight : node.type === 'city' && m.owner[node.id] === 'neutral' ? BALANCE.threatNeutralWeight : 0;
+        const w = node.minor ? 0 : node.id === 'alpha7' ? BALANCE.threatHomeWeight : m.owner[node.id] === 'player' ? BALANCE.threatOwnedWeight : m.allied[node.id] ? BALANCE.threatAlliedWeight : node.type === 'city' && m.owner[node.id] === 'neutral' ? BALANCE.threatNeutralWeight : 0;
         if (w > 0) {
             targets.push({id: node.id, w});
             total += w;

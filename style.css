@@ -3039,23 +3039,82 @@ body.in-battle .build-only {
 
 .gc-portrait {
     flex: none;
-    width: 40px;
-    height: 40px;
-    margin: 6px 6px 0 4px;
-    display: grid;
-    place-items: center;
-    transform: rotate(45deg);
-    border: 1px solid var(--gold-1);
-    background: radial-gradient(circle, rgba(10, 200, 185, .5), rgba(10, 50, 60, .7) 60%, var(--ink-0));
-    box-shadow: 0 0 18px -2px rgba(10, 200, 185, .6)
+    width: 76px;
+    height: 76px;
+    margin-top: 2px;
+    filter: drop-shadow(0 0 14px rgba(10, 200, 185, .35))
 }
 
-.gc-portrait span {
-    width: 10px;
-    height: 10px;
-    background: var(--gold-hi);
-    box-shadow: 0 0 12px var(--teal);
-    animation: speak 1.6s ease-in-out infinite
+.pm-face {
+    width: 100%;
+    height: 100%;
+    overflow: visible
+}
+
+.pm-hex {
+    fill: none;
+    stroke: var(--gold-1);
+    stroke-width: 1.4
+}
+
+.pm-ring {
+    fill: none;
+    transform-origin: 36px 36px
+}
+
+.pm-r1 {
+    stroke: rgba(10, 200, 185, .75);
+    stroke-width: 1.6;
+    stroke-dasharray: 9 5;
+    animation: pmSpin 14s linear infinite
+}
+
+.pm-r2 {
+    stroke: rgba(200, 170, 110, .7);
+    stroke-width: 1;
+    stroke-dasharray: 2 5;
+    animation: pmSpin 9s linear infinite reverse
+}
+
+.pm-scan {
+    fill: rgba(63, 245, 230, .22);
+    animation: pmScan 3.2s linear infinite
+}
+
+.pm-eye {
+    transform-origin: 36px 36px;
+    animation: pmIdle 4s ease-in-out infinite
+}
+
+#guide-card.speaking .pm-eye {
+    animation: pmTalk .32s ease-in-out infinite alternate
+}
+
+#guide-card.speaking .pm-r1 {
+    animation-duration: 4s
+}
+
+.gc-name {
+    display: flex;
+    flex-direction: column;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    letter-spacing: .08em;
+    color: var(--gold-hi);
+    line-height: 1.1
+}
+
+.gc-name small {
+    font-family: var(--font-ui);
+    font-size: .66rem;
+    font-weight: 600;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--teal)
+}
+
+#guide-card {
+    cursor: pointer
 }
 
 .gc-body {
@@ -3192,6 +3251,25 @@ dfn.term {
 .tt-row span {
     color: var(--gold-hi);
     font-weight: 600
+}
+
+@keyframes pmSpin {
+    to { transform: rotate(360deg) }
+}
+
+@keyframes pmScan {
+    from { transform: translateY(6px) }
+    to { transform: translateY(66px) }
+}
+
+@keyframes pmIdle {
+    0%, 100% { transform: scale(1) }
+    50% { transform: scale(1.06) }
+}
+
+@keyframes pmTalk {
+    from { transform: scale(.92) }
+    to { transform: scale(1.16) }
 }
 
 @keyframes speak {

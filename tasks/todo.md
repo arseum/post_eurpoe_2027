@@ -189,3 +189,10 @@ Experts 88/90/90 %, moyen 44 %, les 6 fins obtenues sur 50 parties, victoire typ
 - Chrome : délai des infobulles (rien à 150 ms, visible à 600 ms), termes et atouts expliqués, pré-alerte et alerte de menace guide coupé, confirmation « Alpha-7 est en danger » malgré « Ne plus me demander » puis disparue une fois défendue, suivi d'objectifs (début, milieu, replié, masqué sous tiroir, 1280×720), tiroir Aide, conseils hors tutoriel, début de partie complet guide activé jusqu'au tour 3.
 - Corrigé en route : l'objectif « premier territoire » annonçait le chapitre 2 pour n'importe quel territoire, alors que seuls Lyon, Marseille et le CERN l'ouvrent ; « Activer les conseils » relançait le tutoriel terminé (désormais séparé de « Rejouer le tutoriel »).
 - Limite : le texte du chapitre 1 parle encore de « repousser les premières menaces » (inchangé).
+
+## Tutoriel incarné (spec : `tasks/spec-tutoriel.md`, 2026-10-09)
+
+- [x] Étape 1 : nœud Ruines de Grenoble (1 tour, garnison 5, cache 20/10/10, `minor`), mesure au harnais 8 graines vs 1.4.0 (voir spec)
+- [x] Étape 2 : portrait SVG de PROMETHEUS, voix mot à mot, clic / Espace pour finir puis passer (relance si la carte est masquée en cours de frappe)
+- [x] Étape 3 : tutoriel en 17 étapes jusqu'au premier combat et au retour de l'armée, objectifs « Attaquer X · % · tours » et « Assaut en cours »
+- [x] Étape 4 : tests Chrome (tutoriel complet tour 1 → tour 2, clic et Espace, combat, retour), documentation

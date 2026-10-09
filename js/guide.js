@@ -19,21 +19,108 @@ function armyCount(s) {
     return s.army.length + (s.map.garrisons.alpha7 || []).length;
 }
 
+const PROMETHEUS_FACE = '<svg class="pm-face" viewBox="0 0 72 72" aria-hidden="true"><defs><radialGradient id="pmIris" cx="50%" cy="45%" r="55%"><stop offset="0" stop-color="#e9fffb"/><stop offset=".35" stop-color="#3ff5e6"/><stop offset="1" stop-color="#0a5d58"/></radialGradient><radialGradient id="pmBg" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#0d2a36"/><stop offset="1" stop-color="#04080f"/></radialGradient><clipPath id="pmClip"><circle cx="36" cy="36" r="27"/></clipPath></defs><polygon class="pm-hex" points="36,2 65,19 65,53 36,70 7,53 7,19"/><circle cx="36" cy="36" r="27" fill="url(#pmBg)"/><g clip-path="url(#pmClip)"><rect class="pm-scan" x="9" y="0" width="54" height="3"/></g><circle class="pm-ring pm-r1" cx="36" cy="36" r="24"/><circle class="pm-ring pm-r2" cx="36" cy="36" r="18.5"/><g class="pm-eye"><circle cx="36" cy="36" r="10" fill="url(#pmIris)"/><circle cx="36" cy="36" r="4.2" fill="#04080f"/><circle cx="34.4" cy="34.2" r="1.3" fill="#f0e6d2"/></g></svg>';
+const TYPE_MS = 18;
+const gtw = {timer: null, done: true, nodes: []};
+
+function reducedMotion() {
+    return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function setSpeaking(on) {
+    const card = document.getElementById('guide-card');
+    if (card) card.classList.toggle('speaking', on);
+}
+
+function finishGuideType() {
+    clearInterval(gtw.timer);
+    gtw.timer = null;
+    gtw.nodes.forEach(n => n.node.textContent = n.text);
+    gtw.nodes = [];
+    gtw.done = true;
+    setSpeaking(false);
+}
+
+function guideType(el) {
+    finishGuideType();
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) nodes.push({node: walker.currentNode, text: walker.currentNode.textContent});
+    if (reducedMotion() || !nodes.length) return;
+    nodes.forEach(n => n.node.textContent = '');
+    gtw.nodes = nodes;
+    gtw.done = false;
+    setSpeaking(true);
+    let i = 0, pos = 0;
+    gtw.timer = setInterval(() => {
+        const n = nodes[i];
+        if (!n) return finishGuideType();
+        pos++;
+        n.node.textContent = n.text.slice(0, pos);
+        if (pos >= n.text.length) {
+            i++;
+            pos = 0;
+        }
+    }, TYPE_MS);
+}
+
+function guideCardClick(e) {
+    if (e.target.closest('.gc-skip')) return;
+    if (!gtw.done) {
+        e.stopPropagation();
+        e.preventDefault();
+        finishGuideType();
+        return;
+    }
+    if (e.target.closest('button, a, dfn')) return;
+    const ack = document.querySelector('#guide-card .gc-actions .btn-primary');
+    if (ack) {
+        e.stopPropagation();
+        guideAck();
+    }
+}
+
+function onGuideKeydown(e) {
+    if (e.key !== ' ' && e.key !== 'Enter') return;
+    const card = document.getElementById('guide-card');
+    if (!card || !card.classList.contains('show')) return;
+    if (document.activeElement && document.activeElement !== document.body) return;
+    if (document.querySelector('#confirm-overlay.active, #event-overlay.active')) return;
+    e.preventDefault();
+    if (!gtw.done) return finishGuideType();
+    if (card.querySelector('.gc-actions .btn-primary')) guideAck();
+}
+
+function initGuideCard() {
+    const card = document.getElementById('guide-card');
+    if (!card || card._wired) return;
+    card._wired = true;
+    card.addEventListener('click', guideCardClick, true);
+    document.addEventListener('keydown', onGuideKeydown);
+}
+
 function newGuide(on) {
     return {on, step: 0, seen: [], tip: null, base: 0};
 }
 
+const GRENOBLE = 'grenoble';
+
+function drawerBuildBtn(name) {
+    const row = [...document.querySelectorAll('#drawer .row')].find(r => r.textContent.includes(name));
+    return row ? row.querySelector('.btn-primary:not(:disabled)') || row : null;
+}
+
 const GUIDE_STEPS = [
     {
-        text: 'Commandant, voici ce qu\'il reste de l\'Europe. Notre dôme, <b>Alpha-7</b>, veille sous les Alpes. Hegemonia tient Berlin : la libérer mettra fin à la guerre.',
+        text: 'Commandant. Je suis <b>PROMETHEUS</b>, l\'intelligence qui veille sur le dôme d\'<b>Alpha-7</b>. On m\'a conçue avant l\'effondrement pour protéger les derniers survivants des Alpes, et je me réveille avec vous. Au nord, <b>Hegemonia</b> tient Berlin et broie ce qui reste de l\'Europe. Notre mission : survivre, puis la libérer.',
         target: () => nodeLabel('alpha7'), ack: true
     },
     {
-        text: 'Nos réserves : énergie, matériaux, données, stabilité et influence. Survolez-les pour voir le gain de chaque tour. Si l\'<b>énergie</b> ou la <b>stabilité</b> tombe à zéro, le dôme s\'effondre.',
+        text: 'Voici nos réserves : énergie, matériaux, données, stabilité et influence. Survolez-les pour voir le gain de chaque tour. Une règle avant tout : si l\'<b>énergie</b> ou la <b>stabilité</b> tombe à zéro, le dôme s\'éteint.',
         target: () => gq('#res-plates'), ack: true
     },
     {
-        text: 'Chaque ordre (bâtir, étudier, marcher, s\'allier, fortifier) coûte <b>1 point de commandement</b>. Vous en avez 3 par tour. Recruter est gratuit.',
+        text: 'Chaque ordre coûte <b>1 point de commandement</b>, et nous en avons 3 par tour. Ils ne se gardent pas d\'un tour à l\'autre : ce premier tour, nous allons les utiliser tous les trois. Recruter, en revanche, est gratuit.',
         target: () => gq('#cmd'), ack: true
     },
     {
@@ -41,38 +128,58 @@ const GUIDE_STEPS = [
         target: () => gq('#vs-base'), done: () => centerView === 'base'
     },
     {
-        text: 'Un bâtiment produit à chaque tour. Cliquez sur un <b>emplacement libre</b> (anneau doré au sol), puis bâtissez le <b>Réacteur à Fusion</b> : il sécurise notre énergie.',
-        target: () => openDrawer === 'dome'
-            ? [...document.querySelectorAll('#drawer .row .btn-primary')].find(b => !b.disabled && b.textContent.includes('Bâtir')) || gq('#drawer .row')
-            : centerView === 'base' ? null : gq('#vs-base'),
-        done: s => s.buildings.length >= 1
+        text: 'Premier ordre : le <b>Réacteur à Fusion</b>. Cliquez sur un emplacement libre (anneau doré au sol), puis bâtissez-le : sans énergie, rien ne tient.',
+        target: () => openDrawer === 'dome' ? drawerBuildBtn('Réacteur') : centerView === 'base' ? null : gq('#vs-base'),
+        done: s => s.buildings.includes('reacteur')
     },
     {
-        text: 'Une bonne économie ne suffit pas. Ouvrez le panneau <b>Armée</b>.',
-        target: () => railBtn('army'), done: () => openDrawer === 'army'
+        text: 'Deuxième ordre : l\'<b>Usine de Nanofabrication</b>. Ses matériaux servent à bâtir et à recruter. Bâtissez-la sur un autre emplacement.',
+        target: () => openDrawer === 'dome' ? drawerBuildBtn('Usine') : centerView === 'base' ? null : gq('#vs-base'),
+        done: s => s.buildings.includes('usine')
     },
     {
-        text: 'Recrutez une <b>Sentinelle</b>. Elle tient la ligne avant et ne coûte aucun point de commandement.',
-        target: () => openDrawer === 'army' ? gq('#drawer .recruit:not(:disabled)') : railBtn('army'),
-        enter: g => g.base = armyCount(state),
-        done: s => armyCount(s) > s.guide.base
-    },
-    {
-        text: 'Autour de nous, des cités libres. On peut les rallier ou les soumettre. Cliquez sur <b>Lyon</b> sur la carte.',
-        target: () => nodeLabel('lyon'),
+        text: 'Mes scanners captent des automates errants dans les <b>Ruines de Grenoble</b>, à un tour de marche. Une proie facile pour nos trois Sentinelles, et une cache de matériaux à la clé. Revenez à la carte et sélectionnez Grenoble.',
+        target: () => centerView === 'map' ? nodeLabel(GRENOBLE) : gq('#vs-map'),
         enter: () => {
             openDrawer = null;
             setTimeout(renderBuildPhase, 0);
         },
-        done: () => selectedNode === 'lyon'
+        done: s => selectedNode === GRENOBLE || !!s.map.armyDest || s.map.owner[GRENOBLE] === 'player'
     },
     {
-        text: 'Chaque cité offre autre chose selon la voie choisie. <b>Prendre</b> Lyon nous livre son réseau d\'écoute, au prix de la stabilité. <b>S\'allier</b> coûte de l\'influence, et sa Ligue marchande nous ouvre les autres cités.',
-        target: () => gq('#node-panel.open .city-cards') || gq('#node-panel.open'), ack: true
+        text: 'Le panneau montre la <b>garnison estimée</b>. Avant chaque attaque, je calcule nos chances : cliquez sur <b>Préparer l\'assaut</b>.',
+        target: () => gq('#node-panel.open .np-actions .btn-primary') || nodeLabel(GRENOBLE),
+        done: s => !!assaultPlan || !!s.map.armyDest || s.map.owner[GRENOBLE] === 'player'
     },
     {
-        text: 'Quand vos ordres sont donnés, <b>terminez le tour</b>. La production tombe, les armées avancent, les menaces approchent.',
-        target: () => gq('#btn-endturn'), done: s => s.turn >= 2
+        text: 'Victoire quasi certaine. Le <b>repli</b> protège l\'armée si le combat tourne mal. Troisième et dernier ordre du tour : <b>lancez l\'assaut</b>.',
+        target: () => gq('#confirm-overlay .assault-box .btn-primary') || gq('#node-panel.open .np-actions .btn-primary'),
+        done: s => !!s.map.armyDest || s.map.owner[GRENOBLE] === 'player'
+    },
+    {
+        text: 'L\'armée est en route, et le dôme est vide. Ouvrez le panneau <b>Armée</b> et recrutez une <b>Sentinelle</b> : loin de l\'armée, les recrues restent en garnison à Alpha-7.',
+        target: () => openDrawer === 'army' ? gq('#drawer .recruit:not(:disabled)') : railBtn('army'),
+        done: s => (s.map.garrisons.alpha7 || []).length > 0 || s.map.owner[GRENOBLE] === 'player'
+    },
+    {
+        text: 'Tous nos ordres sont donnés. <b>Terminez le tour</b> : l\'armée atteindra les ruines, et le combat commencera.',
+        target: () => gq('#btn-endturn'),
+        enter: () => {
+            openDrawer = null;
+            setTimeout(renderBuildPhase, 0);
+        },
+        done: s => s.phase === 'battle' || s.turn >= 2
+    },
+    {
+        text: 'Le combat se résout seul. La <b>ligne avant</b> encaisse les coups, les unités rapides frappent l\'arrière. Accélérez avec ×2 ou ×3 si vous le souhaitez.',
+        target: () => gq('#speed'), inBattle: true, watch: true,
+        done: s => s.phase === 'build' && s.turn >= 2
+    },
+    {
+        text: 'Grenoble est à nous. La cache des ruines a rempli nos réserves. Mais l\'armée est loin du dôme : ramenez-la à <b>Alpha-7</b>. Hegemonia frappera bientôt, et c\'est le dôme qu\'elle visera d\'abord.',
+        target: () => selectedNode === 'alpha7' ? [...document.querySelectorAll('#node-panel.open .np-actions .btn-primary')].find(b => b.textContent.includes('Déplacer')) || gq('#node-panel.open') : nodeLabel('alpha7'),
+        enter: g => g.seen.push('holding', 'battle'),
+        done: s => s.map.armyAt === 'alpha7' || s.map.armyDest === 'alpha7' || s.map.owner[GRENOBLE] !== 'player'
     },
     {
         text: 'Mon cortex peut débloquer bâtiments, unités et héros. Ouvrez le <b>Savoir</b>.',
@@ -83,8 +190,15 @@ const GUIDE_STEPS = [
         target: () => gq('#research-modal .rs-item.avail') || gq('#research-modal'), ack: true, inResearch: true
     },
     {
-        text: 'Le reste vous appartient, Commandant. Je vous signalerai l\'essentiel en chemin. Le bouton <b>Aide</b> du rail rappelle le déroulé d\'une partie, les termes du jeu et les destins possibles.',
-        target: () => gq('#btn-guide'), ack: true
+        text: 'Plus loin, <b>Lyon</b>, <b>Marseille</b> et <b>Turin</b>. Leurs garnisons sont bien plus solides : il faudra une vraie armée pour les prendre, ou de l\'influence pour s\'allier. Chacune offre un atout différent selon la voie choisie.',
+        target: () => nodeLabel('lyon'), ack: true,
+        enter: () => {
+            if (gq('#research-overlay').classList.contains('active')) toggleResearch();
+        }
+    },
+    {
+        text: 'Je vous laisse les commandes. L\'encart <b>Objectifs</b> indique toujours la prochaine étape, et le bouton <b>Aide</b> résume le reste. Je vous signalerai chaque danger.',
+        target: () => gq('#objectives'), ack: true
     }
 ];
 
@@ -103,7 +217,7 @@ const GUIDE_TIPS = [
     },
     {
         id: 'battle', urgent: true, inBattle: true,
-        trigger: s => s.phase === 'battle',
+        trigger: s => s.phase === 'battle' && s.guide.step >= GUIDE_STEPS.length,
         expire: s => s.phase === 'build',
         target: () => gq('#speed'),
         text: 'Le combat se résout seul. La ligne avant encaisse, les unités rapides frappent l\'arrière. Accélérez avec ×2 ou ×3.'
@@ -278,6 +392,10 @@ function guideUpdate() {
     if (!cur || !guideVisible(cur)) {
         card.classList.remove('show');
         guideTarget = null;
+        if (!gtw.done) {
+            finishGuideType();
+            guideKey = null;
+        }
         return;
     }
     const isStep = cur.kind === 'step';
@@ -286,9 +404,11 @@ function guideUpdate() {
         guideKey = key;
         const count = isStep ? `<span class="gc-count">${state.guide.step + 1} / ${GUIDE_STEPS.length}</span>` : `<span class="gc-count${cur.item.vital ? ' vital' : ''}">${cur.item.vital ? 'Alerte' : 'Conseil'}</span>`;
         const actions = (isStep && !cur.item.ack)
-            ? `<span class="gc-hint">${ic('hand-pointing')}À vous de jouer</span>`
+            ? `<span class="gc-hint">${ic(cur.item.watch ? 'eye' : 'hand-pointing')}${cur.item.watch ? 'Observez le combat' : 'À vous de jouer'}</span>`
             : `<button class="btn btn-primary" onclick="guideAck()">Compris</button>`;
-        card.innerHTML = `<div class="gc-portrait"><span></span></div><div class="gc-body"><div class="gc-head"><span class="eyebrow">PROMETHEUS · Conseiller</span>${count}</div><p class="gc-text">${glossText(cur.item.text)}</p><div class="gc-actions">${actions}${state.guide.on ? '<button class="gc-skip" onclick="guideSkip()">Passer le guide</button>' : ''}</div></div>`;
+        initGuideCard();
+        card.innerHTML = `<div class="gc-portrait">${PROMETHEUS_FACE}</div><div class="gc-body"><div class="gc-head"><span class="gc-name">PROMETHEUS<small>IA du dôme Alpha-7</small></span>${count}</div><p class="gc-text">${glossText(cur.item.text)}</p><div class="gc-actions">${actions}${state.guide.on ? '<button class="gc-skip" onclick="guideSkip()">Passer le guide</button>' : ''}</div></div>`;
+        guideType(card.querySelector('.gc-text'));
         card.classList.remove('show');
         void card.offsetWidth;
     }
